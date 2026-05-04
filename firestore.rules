@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email.lower() == 'jirehstar6@gmail.com' && 
+             request.auth.token.email_verified == true;
+    }
+
+    // Settings
+    match /settings/main {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Products
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Services
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Videos
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Reals
+    match /reals/{realId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Notifications
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      function isValidProfile(data) {
+        return data.keys().hasAll(['uid', 'email', 'fullName', 'occupation', 'phone', 'city', 'role', 'completedAt']) &&
+               data.uid == userId &&
+               data.email is string &&
+               data.fullName is string &&
+               data.occupation is string &&
+               data.phone is string &&
+               data.city is string &&
+               data.role is string;
+      }
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidProfile(request.resource.data);
+    }
+
+    // Market Items rules
+    match /market_items/{itemId} {
+      function isValidMarketItem(data) {
+        return data.keys().hasAll(['name', 'category', 'price', 'location', 'creatorId', 'createdAt']) &&
+               data.creatorId is string &&
+               data.createdAt is number;
+      }
+
+      allow list: if true; 
+      allow get: if true; 
+      
+      // Allow create if admin OR if owner (but admin still needs to provide valid basic fields)
+      allow create: if isSignedIn() && (
+        isAdmin() || (
+          isValidMarketItem(request.resource.data) &&
+          request.resource.data.creatorId == request.auth.uid
+        )
+      );
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || (
+          request.resource.data.creatorId == resource.data.creatorId &&
+          request.auth.uid == resource.data.creatorId
+        )
+      );
+
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.creatorId);
+    }
+  }
+}

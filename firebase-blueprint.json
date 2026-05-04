@@ -1,0 +1,171 @@
+{
+  "entities": {
+    "MarketItem": {
+      "title": "Market Item",
+      "description": "Item sold in the market (e.g., sheep, vegetables, snacks)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "string" },
+        "location": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "shopName": { "type": "string" },
+        "description": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["name", "category", "price", "location", "creatorId", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Premium fresh product",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "badge": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "price", "imageUrl", "createdAt"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Service offered by the platform",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "description", "imageUrl", "createdAt"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "Video content",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "caption": { "type": "string" },
+        "src": { "type": "string" },
+        "srcType": { "type": "string", "enum": ["file", "youtube", "facebook"] },
+        "thumbnail": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "src", "srcType", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Application settings and content",
+      "type": "object",
+      "properties": {
+        "whatsapp": { "type": "string" },
+        "call": { "type": "string" },
+        "heroVideoId": { "type": "string" },
+        "publicityVideoId": { "type": "string" },
+        "publicityTitle": { "type": "string" },
+        "publicitySubtitle": { "type": "string" },
+        "heroTitle": { "type": "string" },
+        "heroSubtitle": { "type": "string" },
+        "bannerTitle": { "type": "string" },
+        "bannerDesc": { "type": "string" },
+        "statsTitle": { "type": "string" },
+        "statsValue1": { "type": "string" },
+        "statsLabel1": { "type": "string" },
+        "statsValue2": { "type": "string" },
+        "statsLabel2": { "type": "string" },
+        "statsQuote": { "type": "string" },
+        "feature1Title": { "type": "string" },
+        "feature1Desc": { "type": "string" },
+        "feature1Img": { "type": "string" },
+        "feature2Title": { "type": "string" },
+        "feature2Desc": { "type": "string" },
+        "feature2Img": { "type": "string" },
+        "feature3Title": { "type": "string" },
+        "feature3Desc": { "type": "string" },
+        "feature3Img": { "type": "string" }
+      }
+    },
+    "Real": {
+      "title": "Real",
+      "description": "Portfolio item or creative work",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "imageUrl", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app announcement",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "warning", "error"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "message", "type", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Extended user information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "occupation": { "type": "string" },
+        "phone": { "type": "string" },
+        "city": { "type": "string" },
+        "role": { "type": "string" },
+        "about": { "type": "string" },
+        "completedAt": { "type": "number" }
+      },
+      "required": ["uid", "email", "fullName", "occupation", "phone", "city", "role", "completedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles and onboarding data"
+    },
+    "/market_items/{itemId}": {
+      "schema": "MarketItem",
+      "description": "Collection of items available in the market"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Premium fresh products"
+    },
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Platform services"
+    },
+    "/videos/{videoId}": {
+      "schema": "Video",
+      "description": "App videos"
+    },
+    "/reals/{realId}": {
+      "schema": "Real",
+      "description": "Djapero Reals"
+    },
+    "/notifications/{notifId}": {
+      "schema": "Notification",
+      "description": "System notifications"
+    },
+    "/settings/main": {
+      "schema": "Settings",
+      "description": "Main app settings"
+    }
+  }
+}

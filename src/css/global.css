@@ -1,0 +1,342 @@
+/* Styles globaux pour Djapero */
+:root {
+    --color-primary: #10b981;
+    --color-primary-light: #d1fae5;
+    --color-primary-dark: #059669;
+    --color-secondary: #ffbe0b;
+    --sidebar-bg: #10b981; /* S'aligner sur la marque mais avec le style de l'image */
+    --sidebar-active: #ffffff;
+    --color-bg: #f8fafc;
+    --color-text: #1e293b;
+    --color-text-light: #64748b;
+    --font-heading: 'Outfit', 'Poppins', sans-serif;
+    --font-body: 'Poppins', sans-serif;
+    --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.05);
+    --radius-xl: 32px;
+    --radius-lg: 20px;
+    --radius-md: 12px;
+}
+
+body {
+    font-family: var(--font-body);
+    color: var(--color-text);
+    background-color: var(--color-bg);
+}
+
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.main-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    padding-left: 280px; /* Desktop sidebar width */
+    transition: padding-left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.sidebar-collapsed .main-wrapper {
+    padding-left: 90px;
+}
+
+@media (max-width: 991px) {
+    .main-wrapper {
+        padding-left: 0;
+    }
+}
+
+/* Sidebar Styles matching the screenshot */
+.sidebar {
+    width: 280px;
+    background: #10b981; /* Solid color first for safety */
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    color: white;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    padding: 32px 20px;
+    display: none; /* Hidden by default */
+    flex-direction: column;
+    z-index: 1000; /* Increased */
+    border-top-right-radius: 60px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+@media (min-width: 1024px) {
+    .sidebar {
+        display: flex; /* Show only on large screens */
+    }
+}
+
+/* Ensure mobile sidebar (when open via JS) is visible */
+.lg\:hidden + .sidebar,
+aside.sidebar[style*="transform: none"] {
+    display: flex !important;
+}
+
+.sidebar.collapsed {
+    width: 90px;
+}
+
+.sidebar.collapsed .sidebar-logo span,
+.sidebar.collapsed .sidebar-nav p,
+.sidebar.collapsed .sidebar-link span,
+.sidebar.collapsed .sidebar-footer div:not(.w-10),
+.sidebar.collapsed .sidebar-footer p,
+.sidebar.collapsed .sidebar-promo-card {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-link {
+    padding: 16px;
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    align-items: center;
+}
+
+.sidebar-toggle-btn {
+    position: absolute;
+    top: 32px;
+    right: -20px;
+    background: white;
+    color: var(--color-primary);
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    cursor: pointer;
+    z-index: 1100;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid #f1f5f9;
+}
+
+.sidebar-toggle-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 15px 35px rgba(16, 185, 129, 0.25);
+    border-color: var(--color-primary-light);
+}
+
+.sidebar.collapsed .sidebar-toggle-btn {
+    right: -20px;
+}
+
+.sidebar-logo {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 40px;
+    font-family: var(--font-heading);
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-grow: 1;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-radius: 20px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+}
+
+.sidebar-link:hover {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-link.active {
+    background-color: white;
+    color: var(--color-primary);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.btn-upload-new {
+    background-color: white;
+    color: var(--color-primary);
+    width: 100%;
+    padding: 16px;
+    border-radius: 20px;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    margin-bottom: 32px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-upload-new:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
+    background-color: #f8fafc;
+}
+
+.btn-upload-new:active {
+    transform: scale(0.98);
+}
+
+.sidebar.collapsed .btn-upload-new span {
+    display: none;
+}
+.sidebar.collapsed .btn-upload-new {
+    padding: 16px;
+    border-radius: 15px;
+}
+
+.sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Footer Styles */
+.footer {
+    background-color: white;
+    padding: 60px 0 30px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+}
+
+.footer .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 40px;
+}
+
+.footer-content {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 60px;
+    margin-bottom: 40px;
+}
+
+.footer-brand h2 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+    margin-bottom: 12px;
+    color: #0f172a;
+}
+
+.footer-brand p {
+    color: #64748b;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    max-width: 300px;
+}
+
+.footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.footer-links a {
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: color 0.3s ease;
+}
+
+.footer-links a:hover {
+    color: var(--color-primary);
+}
+
+.footer-socials {
+    display: flex;
+    gap: 16px;
+}
+
+.footer-socials a {
+    width: 44px;
+    height: 44px;
+    background-color: #f8fafc;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0f172a;
+    transition: all 0.3s ease;
+}
+
+.footer-socials a:hover {
+    background-color: var(--color-primary);
+    color: white;
+    transform: translateY(-5px);
+}
+
+.footer-bottom {
+    padding-top: 30px;
+    border-top: 1px solid #f1f5f9;
+    text-align: center;
+}
+
+.footer-bottom p {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* Refined Admin Styling */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+@utility admin-input-refined {
+    @apply w-full bg-[#f8fafc] border border-[#e2e8f0] px-7 py-4 rounded-2xl text-[#0f172a] outline-none focus:border-emerald-500 focus:bg-white transition-all font-bold shadow-sm placeholder:text-gray-300 min-h-[64px] flex items-center;
+}
+
+@utility admin-input-icon-wrapper {
+    @apply relative w-full flex items-center;
+}
+
+@utility admin-input-with-icon {
+    @apply admin-input-refined !pl-16;
+}
+
+@utility admin-input-icon {
+    @apply absolute left-6 top-1/2 -translate-y-1/2 pointer-events-none transition-colors z-10;
+}
+
+@media (max-width: 768px) {
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 40px;
+        text-align: center;
+    }
+    .footer-brand p {
+        margin: 0 auto;
+    }
+    .footer-socials {
+        justify-content: center;
+    }
+}
+

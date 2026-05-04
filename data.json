@@ -1,0 +1,86 @@
+{
+  "products": [
+    {
+      "id": "p1",
+      "name": "Panier Bio Fraîcheur",
+      "category": "Fruits & Légumes",
+      "price": "15000 FCFA",
+      "description": "Un assortiment de légumes de saison cultivés localement sans pesticides.",
+      "imageUrl": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800",
+      "badge": "Top Vente",
+      "createdAt": 1714555159000
+    },
+    {
+      "id": "p2",
+      "name": "Poisson Braisé Premium",
+      "category": "Pêche du jour",
+      "price": "8500 FCFA",
+      "description": "Carpe fraîche marinée aux épices locales et braisée au charbon de bois.",
+      "imageUrl": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&q=80&w=800",
+      "badge": "Nouveau",
+      "createdAt": 1714555160000
+    },
+    {
+      "id": "p3",
+      "name": "Jus d'Hibiscus Artisanal",
+      "category": "Boissons",
+      "price": "1500 FCFA",
+      "description": "Bissap rouge naturel infusé à la menthe fraîche et au gingembre.",
+      "imageUrl": "https://images.unsplash.com/photo-1544054158-422e9d759a84?auto=format&fit=crop&q=80&w=800",
+      "badge": "Bio",
+      "createdAt": 1714555161000
+    }
+  ],
+  "videos": [
+    {
+      "id": "v1",
+      "title": "Djapero Story",
+      "caption": "Découvrez les coulisses de notre sélection de produits frais.",
+      "src": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "srcType": "youtube",
+      "thumbnail": "https://images.unsplash.com/photo-1615485240384-552e400a9ca1?auto=format&fit=crop&q=80&w=800",
+      "createdAt": 1714555162000
+    }
+  ],
+  "services": [
+    {
+      "id": "s1",
+      "name": "Identité Visuelle",
+      "category": "Communication",
+      "description": "Création de logos et chartes graphiques percutantes pour votre marque.",
+      "imageUrl": "https://images.unsplash.com/photo-1572044162444-ad60f128bde7?auto=format&fit=crop&q=80&w=800",
+      "createdAt": 1714555163000
+    },
+    {
+      "id": "s2",
+      "name": "Social Media Management",
+      "category": "Marketing Digital",
+      "description": "Gestion de vos réseaux sociaux et création de contenu viral.",
+      "imageUrl": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&q=80&w=800",
+      "createdAt": 1714555164000
+    }
+  ],
+  "reals": [
+    {
+      "id": "r1",
+      "title": "Campagne Fruits 2024",
+      "category": "Photographie",
+      "imageUrl": "https://images.unsplash.com/photo-1610832958506-aa56338406cd?auto=format&fit=crop&q=80&w=800",
+      "createdAt": 1714555165000
+    }
+  ],
+  "settings": {
+    "whatsapp": "22890000000",
+    "call": "22890000000",
+    "heroTitle": "Le Frais à votre Porte, la Créativité dans vos Projets",
+    "heroSubtitle": "Djapero allie le meilleur des produits frais du terroir et des services de communication d'excellence.",
+    "bannerTitle": "Livraison Rapide & Fiable",
+    "bannerDesc": "Nous livrons vos produits en moins de 45 minutes partout à Lomé.",
+    "statsTitle": "Notre Impact",
+    "statsValue1": "5000+",
+    "statsLabel1": "Livraisons réussies",
+    "statsValue2": "150+",
+    "statsLabel2": "Partenaires locaux",
+    "statsQuote": "Djapero n'est pas juste un service, c'est un engagement pour la qualité."
+  }
+}
