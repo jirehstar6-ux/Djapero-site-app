@@ -4,6 +4,8 @@ import {
     GoogleAuthProvider, 
     onAuthStateChanged, 
     signOut,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
     User as FirebaseUser 
 } from "firebase/auth";
 import { auth } from "../lib/firebase";
@@ -31,6 +33,8 @@ interface AuthContextType {
     user: User | null;
     profile: UserProfile | null;
     login: () => Promise<void>;
+    loginWithEmail: (email: string, pass: string) => Promise<void>;
+    signupWithEmail: (email: string, pass: string) => Promise<void>;
     logout: () => Promise<void>;
     completeProfile: (data: { 
         fullName: string; 
@@ -89,8 +93,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-        } catch (error) {
-            console.error("Login Error:", error);
+        } catch (error: any) {
+            if (error?.code !== 'auth/popup-closed-by-user') {
+                console.error("Login Error:", error);
+            }
+            throw error;
+        }
+    };
+
+    const loginWithEmail = async (email: string, pass: string) => {
+        try {
+            await signInWithEmailAndPassword(auth, email, pass);
+        } catch (error: any) {
+            console.error("Email Login Error:", error);
+            throw error;
+        }
+    };
+
+    const signupWithEmail = async (email: string, pass: string) => {
+        try {
+            await createUserWithEmailAndPassword(auth, email, pass);
+        } catch (error: any) {
+            console.error("Email Signup Error:", error);
+            throw error;
         }
     };
 
@@ -131,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isAdmin = user?.email?.toLowerCase() === 'jirehstar6@gmail.com';
 
     return (
-        <AuthContext.Provider value={{ user, profile, login, logout, completeProfile, loading, isAdmin }}>
+        <AuthContext.Provider value={{ user, profile, login, loginWithEmail, signupWithEmail, logout, completeProfile, loading, isAdmin }}>
             {children}
         </AuthContext.Provider>
     );

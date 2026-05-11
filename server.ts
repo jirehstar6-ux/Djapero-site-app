@@ -51,14 +51,14 @@ async function startServer() {
 
   // Dedicated upload route BEFORE body parsers to avoid interference
   app.post("/api/upload", (req, res, next) => {
-    console.log("Upload request received...");
+    console.log(`[${new Date().toISOString()}] POST /api/upload - Start`);
     next();
   }, upload.single("file"), (req, res) => {
     if (!req.file) {
-      console.log("Upload failed: No file received");
+      console.error(`[${new Date().toISOString()}] POST /api/upload - No file received`);
       return res.status(400).json({ error: "Aucun fichier reçu" });
     }
-    console.log(`Upload success: ${req.file.filename} (${req.file.size} bytes)`);
+    console.log(`[${new Date().toISOString()}] POST /api/upload - Success: ${req.file.filename} (${req.file.size} bytes)`);
     res.json({ url: `/uploads/${req.file.filename}` });
   });
 
@@ -97,18 +97,6 @@ async function startServer() {
     }
   });
 
-  // Error handling middleware
-  app.use((err: any, req: any, res: any, next: any) => {
-    console.error("Server Error:", err);
-    if (err instanceof multer.MulterError) {
-      if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({ error: "Fichier trop volumineux. La limite est de 500Mo." });
-      }
-      return res.status(400).json({ error: `Erreur Multer: ${err.message}` });
-    }
-    res.status(err.status || 500).json({ error: err.message || "Erreur interne du serveur" });
-  });
-
   app.post("/api/delete-file", async (req, res) => {
     try {
       const { filePath } = req.body;
@@ -124,6 +112,24 @@ async function startServer() {
     } catch (err) {
       res.status(500).json({ error: "Erreur lors de la suppression du fichier" });
     }
+  });
+
+  // Catch-all for API routes to prevent falling through to SPA fallback
+  app.all("/api/*", (req, res) => {
+    console.warn(`[${new Date().toISOString()}] Unhandled API request: ${req.method} ${req.url}`);
+    res.status(404).json({ error: `Route API non trouvée: ${req.method} ${req.url}` });
+  });
+
+  // Error handling middleware
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error(`[${new Date().toISOString()}] Server Error:`, err);
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "Fichier trop volumineux. La limite est de 500Mo." });
+      }
+      return res.status(400).json({ error: `Erreur Multer: ${err.message}` });
+    }
+    res.status(err.status || 500).json({ error: err.message || "Erreur interne du serveur" });
   });
 
   // Serve static files

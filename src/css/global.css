@@ -1,20 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+
 /* Styles globaux pour Djapero */
 :root {
-    --color-primary: #10b981;
-    --color-primary-light: #d1fae5;
-    --color-primary-dark: #059669;
+    --color-primary: #04d333;
+    --color-primary-light: #e8fbed;
+    --color-primary-dark: #03a829;
     --color-secondary: #ffbe0b;
-    --sidebar-bg: #10b981; /* S'aligner sur la marque mais avec le style de l'image */
+    --sidebar-bg: #04d333; /* S'aligner sur la marque mais avec le style de l'image */
     --sidebar-active: #ffffff;
     --color-bg: #f8fafc;
     --color-text: #1e293b;
     --color-text-light: #64748b;
-    --font-heading: 'Outfit', 'Poppins', sans-serif;
-    --font-body: 'Poppins', sans-serif;
+    --font-heading: 'Space Grotesk', 'Outfit', sans-serif;
+    --font-serif: 'Instrument Serif', serif;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
     --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.05);
     --radius-xl: 32px;
     --radius-lg: 20px;
     --radius-md: 12px;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-serif: "Instrument Serif", serif;
 }
 
 body {
@@ -33,40 +43,56 @@ body {
     display: flex;
     flex-direction: column;
     overflow-x: hidden;
-    padding-left: 280px; /* Desktop sidebar width */
-    transition: padding-left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    padding-left: 144px; /* Default space for floating sidebar */
+    transition: padding-left 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-body.sidebar-collapsed .main-wrapper {
-    padding-left: 90px;
+body.sidebar-hidden .main-wrapper {
+    padding-left: 0;
 }
 
-@media (max-width: 991px) {
+@media (max-width: 1024px) {
     .main-wrapper {
-        padding-left: 0;
+        padding-left: 0 !important;
     }
 }
 
-/* Sidebar Styles matching the screenshot */
+/* Sidebar Styles matching the screenshot (Floating Pill) */
 .sidebar {
-    width: 280px;
-    background: #10b981; /* Solid color first for safety */
-    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
-    color: white;
-    height: 100vh;
+    width: 80px;
+    background: #ffffff;
+    color: #1e293b;
+    height: auto;
+    max-height: 98vh;
     position: fixed;
-    left: 0;
-    top: 0;
-    padding: 32px 20px;
-    display: none; /* Hidden by default */
+    left: 32px;
+    top: 20px;
+    bottom: 20px;
+    padding: 24px 0;
+    display: none;
     flex-direction: column;
-    z-index: 1000; /* Increased */
-    border-top-right-radius: 60px;
-    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    align-items: center;
+    z-index: 1000;
+    border-radius: 44px;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    backface-visibility: hidden;
-    transform: translateZ(0);
+    box-shadow: 0 40px 100px rgba(0,0,0,0.1);
+    border: 1px solid rgba(0,0,0,0.1);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+}
+
+html.dark .sidebar {
+    background: #020617;
+    color: white;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar::-webkit-scrollbar {
+    display: none;
 }
 
 @media (min-width: 1024px) {
@@ -133,43 +159,20 @@ aside.sidebar[style*="transform: none"] {
 }
 
 .sidebar-logo {
-    font-size: 1.8rem;
-    font-weight: 800;
     margin-bottom: 40px;
-    font-family: var(--font-heading);
     color: white;
-    white-space: nowrap;
-    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    flex-grow: 1;
-}
-
-.sidebar-link {
-    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
     align-items: center;
-    gap: 16px;
-    padding: 12px 20px;
-    border-radius: 20px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-}
-
-.sidebar-link:hover {
-    color: white;
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-link.active {
-    background-color: white;
-    color: var(--color-primary);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    width: 100%;
 }
 
 .btn-upload-new {

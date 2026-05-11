@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { 
     LayoutDashboard, Box, Video as VideoIcon, Briefcase, Camera as CameraIcon, Settings, ShieldCheck,
     LogOut, Eye, ShoppingBag, Plus, Edit2, Trash2, Save, X, CloudUpload, Store as StoreIcon, MapPin, Phone, Filter, Bell, Play,
-    Image as ImageIcon, Monitor, Users, User, Mail, Star, Heart, Maximize2, Lock
+    Image as ImageIcon, Monitor, Users, User, Mail, Star, Heart, Maximize2, Lock, Megaphone
 } from "lucide-react";
 import { useData, Product, Video, Service, Real, Settings as AppSettings, Notification, MarketItem, UserProfile } from "../hooks/useData";
 import { motion, AnimatePresence } from "motion/react";
 import React from "react";
 import { useAuth } from "../context/AuthContext";
+import Logo from "../components/layout/Logo";
 
 export default function Admin() {
     const { 
@@ -30,7 +31,13 @@ export default function Admin() {
         deleteNotification,
         addReal,
         updateReal,
-        deleteReal
+        deleteReal,
+        addAd,
+        updateAd,
+        deleteAd,
+        addHeroBanner,
+        updateHeroBanner,
+        deleteHeroBanner
     } = useData();
     const { user, login, logout, isAdmin } = useAuth();
     const [activeTab, setActiveTab] = useState("accueil");
@@ -78,15 +85,32 @@ export default function Admin() {
         await deleteMarketItem(id);
     };
 
+    const handleDeleteAd = async (id: string) => {
+        if (!window.confirm("Supprimer cette publicité ?")) return;
+        await deleteAd(id);
+    };
+
+    const handleDeleteHeroBanner = async (id: string) => {
+        if (!window.confirm("Supprimer cette bannière d'accueil ?")) return;
+        await deleteHeroBanner(id);
+    };
+
     const [videoSrcType, setVideoSrcType] = useState<'youtube' | 'file'>('youtube');
     const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
 
     // Modal states
     const [productModal, setProductModal] = useState<Partial<Product> | null>(null);
+    const [bulkProductModal, setBulkProductModal] = useState<boolean>(false);
+    const [bulkRows, setBulkRows] = useState<any[]>([{ name: "", price: "", category: "Frais", description: "", imageUrl: "" }]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("Tous");
     const [videoModal, setVideoModal] = useState<Partial<Video> | null>(null);
     const [serviceModal, setServiceModal] = useState<Partial<Service> | null>(null);
     const [realModal, setRealModal] = useState<Partial<Real> | null>(null);
     const [marketModal, setMarketModal] = useState<Partial<MarketItem> | null>(null);
+    const [adModal, setAdModal] = useState<any>(null);
+    const [heroModal, setHeroModal] = useState<any>(null);
+    const [selectedDetail, setSelectedDetail] = useState<Product | null>(null);
 
     const [previewUrl, setPreviewUrl] = useState<string>("");
     const [uploading, setUploading] = useState(false);
@@ -106,7 +130,7 @@ export default function Admin() {
 
     useEffect(() => {
         setPreviewUrl("");
-    }, [productModal, videoModal, serviceModal, realModal, marketModal]);
+    }, [productModal, videoModal, serviceModal, realModal, marketModal, heroModal, adModal]);
 
     const handleFileUpload = async (file: File): Promise<string | null> => {
         return new Promise((resolve) => {
@@ -131,29 +155,27 @@ export default function Admin() {
                 if (xhr.status === 200) {
                     try {
                         const result = JSON.parse(xhr.responseText);
+                        console.log("Upload Success:", result.url);
                         resolve(result.url);
                     } catch (e) {
                         console.error("Parse error:", e);
-                        alert("Erreur lors de la lecture de la réponse du serveur.");
                         resolve(null);
                     }
-                } else if (xhr.status === 413) {
-                    alert("❌ Fichier trop lourd ! Le serveur limite les envois à 500Mo.");
-                    resolve(null);
                 } else {
-                    let errorMsg = `Erreur serveur (${xhr.status})`;
+                    console.error("Upload Failed Status:", xhr.status);
                     try {
                         const err = JSON.parse(xhr.responseText);
-                        errorMsg = err.error || errorMsg;
-                    } catch (e) {}
-                    alert(`❌ ${errorMsg}`);
+                        alert(`❌ Erreur: ${err.error}`);
+                    } catch (e) {
+                        alert(`❌ Erreur serveur (${xhr.status}). L'importation n'a pas pu aboutir.`);
+                    }
                     resolve(null);
                 }
             };
 
             xhr.onerror = () => {
-                console.error("XHR Network Error");
-                alert("Erreur réseau. Vérifiez votre connexion ou la taille du fichier (Max 500Mo).");
+                console.error("XHR Network Error during importation");
+                alert("❌ Erreur réseau. L'importation a échoué. Vérifiez votre connexion.");
                 setUploading(false);
                 setUploadProgress(0);
                 resolve(null);
@@ -215,24 +237,43 @@ export default function Admin() {
         setAccueilSettings(prev => ({ ...prev, [field]: value }));
     };
 
+    const [loginError, setLoginError] = useState<string | null>(null);
+
+    const handleLogin = async () => {
+        setLoginError(null);
+        try {
+            await login();
+        } catch (err: any) {
+            if (err.code === 'auth/popup-blocked') {
+                setLoginError("Popup bloqué ! Veuillez autoriser les popups.");
+            } else if (err.code === 'auth/popup-closed-by-user') {
+                // Ignore
+            } else {
+                setLoginError("Erreur de connexion.");
+            }
+        }
+    };
+
     if (dataLoading || !data) return <div className="p-20 text-center font-black tracking-tighter text-emerald-600 animate-pulse">Chargement Djapero...</div>;
 
     if (!user || !isAdmin) {
         return (
             <div className="login-screen">
                 <div className="login-card">
-                    <div className="login-logo text-[#059669] font-black text-3xl mb-8 flex items-center justify-center gap-3 tracking-tighter decoration-4 underline decoration-[#ffbe0b]">
-                        Djapero Admin
+                    <div className="login-logo text-[#059669] font-black text-3xl mb-12 flex flex-col items-center justify-center gap-6 tracking-tighter">
+                        <Logo size={80} className="rounded-3xl" />
+                        <span className="decoration-4 underline decoration-[#a3e635]">Djapero Admin</span>
                     </div>
                     <h2 className="text-xl font-bold mb-2">Accès Administrateur</h2>
                     <p className="text-gray-500 mb-8 text-sm">Veuillez vous connecter avec votre compte administrateur Google.</p>
                     <button 
-                        onClick={() => login()}
+                        onClick={handleLogin}
                         className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-lg flex items-center justify-center gap-3"
                     >
                         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5 bg-white rounded-full" />
                         Se connecter avec Google
                     </button>
+                    {loginError && <p className="text-red-500 text-xs mt-4 font-bold uppercase tracking-widest">{loginError}</p>}
                     {!isAdmin && user && <p className="text-red-500 text-sm mt-4 font-medium">Accès refusé. Vous n'êtes pas administrateur.</p>}
                 </div>
             </div>
@@ -241,6 +282,9 @@ export default function Admin() {
 
     return (
         <div className="dashboard flex bg-[#f1f5f9] min-h-screen relative">
+            {data.settings?.adminCustomCode && (
+                <div dangerouslySetInnerHTML={{ __html: data.settings.adminCustomCode }} />
+            )}
             {/* Mobile Sidebar Toggle */}
             <button 
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -264,17 +308,8 @@ export default function Admin() {
 
             {/* Sidebar */}
             <aside className={`fixed inset-y-0 left-0 w-72 bg-[#0f172a] text-white p-6 flex flex-col z-[55] transition-transform duration-500 transform shadow-2xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-                <div className="flex items-center gap-3 mb-12 px-2 group">
-                    <div className="w-12 h-12 rounded-full border-2 border-emerald-500/20 overflow-hidden shadow-2xl shadow-emerald-500/10 group-hover:scale-110 transition-transform">
-                        <img 
-                            src="/uploads/djapero-logo.jpg" 
-                            alt="Admin Logo" 
-                            className="w-full h-full object-cover scale-110" 
-                            onError={(e) => {
-                                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?auto=format&fit=crop&q=80&w=100";
-                            }}
-                        />
-                    </div>
+                <div className="flex items-center gap-4 mb-12 px-2 group">
+                    <Logo size={48} className="rounded-2xl group-hover:scale-110 transition-transform shadow-none bg-emerald-500" />
                     <div>
                         <h1 className="text-2xl font-black tracking-tighter leading-none mb-1">
                             Djapero<span className="text-emerald-500">.</span>
@@ -287,6 +322,7 @@ export default function Admin() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-4 px-4">Menu Principal</p>
                     {[
                         { id: "accueil", label: "Dashboard", icon: LayoutDashboard },
+                        { id: "ads", label: "Bannières & Pub", icon: Megaphone },
                         { id: "marche", label: "Le Marché", icon: StoreIcon },
                         { id: "produits", label: "Boutique Officielle", icon: Box },
                         { id: "videos", label: "Vidéos & Reels", icon: VideoIcon },
@@ -360,7 +396,7 @@ export default function Admin() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-grow lg:ml-64 p-4 md:p-10 w-full overflow-x-hidden relative">
+            <main className="flex-grow lg:ml-72 p-4 md:p-10 w-full overflow-x-hidden relative">
                 {/* Background Decoration */}
                 <div className="absolute top-0 right-0 w-96 h-96 opacity-[0.03] pointer-events-none -mr-20 -mt-20">
                     <svg viewBox="0 0 100 100" className="w-full h-full text-emerald-900 fill-current">
@@ -369,6 +405,148 @@ export default function Admin() {
                 </div>
 
                 <AnimatePresence mode="wait">
+                    {activeTab === "ads" && (
+                        <motion.div key="ads" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                            {/* Section Hero Banner */}
+                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 mt-4">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">En-tête Dashboard (Hero)</span>
+                                    </div>
+                                    <h2 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-1">
+                                        Importations & En-tête<span className="text-emerald-500">.</span>
+                                    </h2>
+                                    <p className="text-gray-400 font-bold text-xs opacity-80 pl-1 uppercase tracking-widest">Gérez les images de couverture et importations principales.</p>
+                                </div>
+                                <button
+                                    id="add-hero-banner-btn"
+                                    onClick={() => {
+                                        setPreviewUrl("");
+                                        setHeroModal({});
+                                    }}
+                                    className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-tighter flex items-center gap-3 shadow-xl shadow-emerald-500/10 hover:bg-emerald-600 transition-all active:scale-95 text-xs"
+                                >
+                                    <Plus size={18} /> Publier un En-tête
+                                </button>
+                            </header>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-20">
+                                { (data.heroBanners || []).map((hero, i) => (
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        key={hero.id} 
+                                        className="bg-emerald-950 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group"
+                                    >
+                                        <div className="absolute inset-0 opacity-20 pointer-events-none">
+                                            <img src={hero.imageUrl} className="w-full h-full object-cover grayscale brightness-200" alt="" />
+                                        </div>
+                                        <div className="relative z-10">
+                                            <div className="flex justify-between items-start mb-6">
+                                                <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${hero.active ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-500'}`}>
+                                                    {hero.active ? 'Actif' : 'Inactif'}
+                                                </span>
+                                                <div className="flex gap-2">
+                                                    <button id={`edit-hero-${hero.id}`} onClick={() => { setPreviewUrl(hero.imageUrl); setHeroModal(hero); }} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-colors"><Edit2 size={16}/></button>
+                                                    <button id={`delete-hero-${hero.id}`} onClick={() => handleDeleteHeroBanner(hero.id)} className="p-3 bg-red-500/10 hover:bg-red-500/30 rounded-xl text-red-500 transition-colors"><Trash2 size={16}/></button>
+                                                </div>
+                                            </div>
+                                            <p className="text-emerald-400 font-bold text-[10px] uppercase tracking-[0.3em] mb-2">{hero.subtitle}</p>
+                                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none mb-4">{hero.title}</h3>
+                                            <p className="text-white/60 text-sm font-bold leading-relaxed">{hero.heading}</p>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                                {(data.heroBanners || []).length === 0 && (
+                                    <div className="col-span-full py-12 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200 text-center flex flex-col items-center justify-center gap-4">
+                                        <Monitor size={32} className="text-gray-200" />
+                                        <p className="text-gray-300 font-black uppercase tracking-widest text-[10px]">Aucun en-tête configuré</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-t border-gray-100 pt-12">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="w-2 h-2 bg-pink-500 rounded-full animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-pink-600">Affiches de Publicité</span>
+                                    </div>
+                                    <h1 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-1">
+                                        Publicités (Bannières)<span className="text-pink-500">.</span>
+                                    </h1>
+                                    <p className="text-gray-400 font-bold text-xs opacity-80 pl-1 uppercase tracking-widest">Gérez les bannières publicitaires (Affiche Pub) du dashboard.</p>
+                                </div>
+                                <button
+                                    id="add-ad-banner-btn"
+                                    onClick={() => {
+                                        setPreviewUrl("");
+                                        setAdModal({});
+                                    }}
+                                    className="bg-pink-500 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-tighter flex items-center gap-3 shadow-xl shadow-pink-500/10 hover:bg-pink-600 transition-all active:scale-95 text-xs"
+                                >
+                                    <Plus size={18} /> Publier une Affiche
+                                </button>
+                            </header>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                { (data.ads || []).map((ad, i) => (
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: i * 0.05 }}
+                                        key={ad.id} 
+                                        className="bg-white p-6 rounded-[3rem] shadow-xl border border-gray-100 group hover:-translate-y-2 transition-all"
+                                    >
+                                        <div className="relative aspect-[21/9] rounded-[2rem] overflow-hidden mb-6 bg-gray-50">
+                                            <img 
+                                                src={ad.imageUrl} 
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[2000ms]" 
+                                                alt={ad.title} 
+                                            />
+                                            <div className={`absolute top-4 left-4 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${ad.active ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                                                {ad.active ? 'Active' : 'Désactivée'}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="px-2 mb-6">
+                                            <h3 className="text-2xl font-black text-[#0f172a] mb-2 leading-none uppercase tracking-tighter">{ad.title}</h3>
+                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest line-clamp-2 italic">{ad.subtitle}</p>
+                                        </div>
+                                        
+                                        <div className="flex gap-3">
+                                            <button 
+                                                onClick={() => {
+                                                    setPreviewUrl(ad.imageUrl);
+                                                    setAdModal(ad);
+                                                }}
+                                                className="flex-1 bg-gray-50 text-gray-400 p-4 rounded-2xl hover:bg-pink-50 hover:text-pink-600 transition-colors flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                                            >
+                                                <Edit2 size={16} /> Éditer
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteAd(ad.id)}
+                                                className="w-14 bg-gray-50 text-gray-400 p-4 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                                {(data.ads || []).length === 0 && (
+                                    <div className="col-span-full py-24 bg-white/50 rounded-[3rem] border-2 border-dashed border-gray-200 text-center flex flex-col items-center justify-center gap-6">
+                                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-300">
+                                            <Megaphone size={40} />
+                                        </div>
+                                        <div>
+                                            <p className="text-gray-400 font-black uppercase tracking-[0.2em] text-xs mb-2">Votre vitrine est vide.</p>
+                                            <p className="text-gray-300 font-bold text-[10px] uppercase tracking-widest max-w-xs mx-auto">Ajoutez une affiche publicitaire pour promouvoir vos services sur la page d'accueil.</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
                     {activeTab === "marche" && (
                         <motion.div key="marche" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
@@ -489,19 +667,72 @@ export default function Admin() {
                                 </div>
                             </header>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+                            {/* Publication Directe depuis le Bord */}
+                            <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 mb-12 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50/50 rounded-full -mr-32 -mt-32 blur-3xl group-hover:scale-110 transition-transform" />
+                                <h3 className="text-xl font-black uppercase tracking-tighter text-emerald-600 mb-8 flex items-center gap-3">
+                                    <Plus size={24} className="p-1 bg-emerald-500 text-white rounded-lg" />
+                                    Publication Express Produit
+                                </h3>
+                                <form className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10" onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    setIsSaving(true);
+                                    try {
+                                        const formData = new FormData(e.currentTarget);
+                                        await addProduct({
+                                            name: formData.get("name") as string,
+                                            price: formData.get("price") as string,
+                                            category: "Général",
+                                            badge: "",
+                                            description: "Publié via Bord Express",
+                                            imageUrl: "",
+                                            createdAt: Date.now()
+                                        });
+                                        (e.target as HTMLFormElement).reset();
+                                        alert("✅ Produit publié avec succès !");
+                                    } catch (err) {
+                                        alert("❌ Erreur lors de la publication.");
+                                    } finally {
+                                        setIsSaving(false);
+                                    }
+                                }}>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-emerald-600 ml-2">Nom du produit</label>
+                                        <input required name="name" className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-bold" placeholder="Ex: Mangue Elite" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-emerald-600 ml-2">Prix (FCFA)</label>
+                                        <input required name="price" className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-bold" placeholder="1.500" />
+                                    </div>
+                                    <div className="flex items-end">
+                                        <button 
+                                            disabled={isSaving}
+                                            className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-emerald-700 active:scale-95 transition-all text-[10px]"
+                                        >
+                                            {isSaving ? "Chargement..." : "Publier Maintenant"}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-12">
                                 {[
-                                    { label: "Articles Boutique", val: (data.products || []).length, icon: Box, color: "emerald" },
-                                    { label: "Vendeurs Marché", val: (data.marketItems || []).length, icon: StoreIcon, color: "orange" },
-                                    { label: "Vidéos Social", val: (data.videos || []).length, icon: VideoIcon, color: "blue" },
-                                    { label: "Expertises", val: (data.services || []).length, icon: Briefcase, color: "purple" },
+                                    { id: "produits", label: "Articles Boutique", val: (data.products || []).length, icon: Box, color: "emerald" },
+                                    { id: "marche", label: "Vendeurs Marché", val: (data.marketItems || []).length, icon: StoreIcon, color: "orange" },
+                                    { id: "videos", label: "Vidéos Social", val: (data.videos || []).length, icon: VideoIcon, color: "blue" },
+                                    { id: "services", label: "Expertises", val: (data.services || []).length, icon: Briefcase, color: "purple" },
+                                    { id: "ads", label: "Pub Affiches", val: (data.ads || []).length, icon: Megaphone, color: "pink" },
+                                    { id: "ads", label: "En-têtes Hero", val: (data.heroBanners || []).length, icon: Monitor, color: "green" },
                                 ].map((stat, i) => (
                                     <motion.div 
                                         key={stat.label}
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: i * 0.1 }}
-                                        className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group"
+                                        onClick={() => {
+                                             if (stat.id) setActiveTab(stat.id);
+                                        }}
+                                        className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer"
                                     >
                                         <div className={`w-12 h-12 bg-gray-50 text-gray-400 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors`}>
                                             <stat.icon size={24} />
@@ -510,6 +741,31 @@ export default function Admin() {
                                         <p className="text-3xl font-black text-[#0f172a] tracking-tighter">{stat.val}</p>
                                     </motion.div>
                                 ))}
+                            </div>
+
+                            {/* Quick Actions Bar */}
+                            <div className="mb-12 bg-white/40 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/50 flex flex-wrap gap-4">
+                                <button 
+                                    onClick={() => {
+                                        setActiveTab("videos");
+                                        setVideoModal({});
+                                        setVideoPreviewUrl("");
+                                        setVideoSrcType('youtube');
+                                    }}
+                                    className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-[1000] text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20"
+                                >
+                                    <VideoIcon size={18} /> Publier un Reel
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setActiveTab("produits");
+                                        setProductModal({});
+                                        setPreviewUrl("");
+                                    }}
+                                    className="px-6 py-4 bg-emerald-600 text-white rounded-2xl font-[1000] text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
+                                >
+                                    <Plus size={18} /> Nouveau Produit
+                                </button>
                             </div>
 
                             {/* Recent Notifications Preview */}
@@ -541,6 +797,54 @@ export default function Admin() {
                                                 </div>
                                             </motion.div>
                                         ))
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Derniers Produits Ajoutés */}
+                            <div className="mb-12">
+                                <div className="flex items-center justify-between mb-8">
+                                    <div>
+                                        <h3 className="text-3xl font-black uppercase tracking-tighter text-[#0f172a]">Derniers Produits</h3>
+                                        <div className="w-12 h-1 bg-emerald-500 rounded-full mt-2" />
+                                    </div>
+                                    <button onClick={() => setActiveTab("produits")} className="px-6 py-2 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all">Catalogue Complet</button>
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 4xl:grid-cols-10 gap-4 md:gap-6">
+                                    {(data.products || []).slice(0, 10).map((p, i) => (
+                                        <motion.div 
+                                            key={p.id}
+                                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                            transition={{ delay: i * 0.05 }}
+                                            className="bg-white p-6 rounded-[2.5rem] border border-emerald-50/50 shadow-sm flex flex-col items-center text-center group cursor-pointer hover:shadow-2xl hover:shadow-emerald-900/10 transition-all hover:-translate-y-2"
+                                            onClick={() => setSelectedDetail(p)}
+                                        >
+                                            <div className="w-full aspect-square bg-gray-50 rounded-[2rem] overflow-hidden mb-6 p-10 group-hover:bg-emerald-50/30 transition-colors">
+                                                <img 
+                                                    src={p.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=200"} 
+                                                    className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-700" 
+                                                    alt={p.name}
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=200';
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="px-1">
+                                                <p className="text-[11px] font-black uppercase text-[#0f172a] truncate w-full mb-1 group-hover:text-emerald-600 transition-colors tracking-tight">{p.name}</p>
+                                                <div className="flex items-center justify-center gap-1 bg-emerald-50/50 px-3 py-1 rounded-full border border-emerald-100/50">
+                                                    <span className="text-[12px] font-black text-emerald-600">{p.price}</span>
+                                                    {!p.price.toString().toUpperCase().includes('FCFA') && (
+                                                        <span className="text-[7px] font-black text-emerald-600/40 uppercase tracking-widest">FCFA</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                    {(data.products || []).length === 0 && (
+                                        <div className="col-span-full py-32 bg-gray-50/50 rounded-[4rem] border border-dashed border-gray-200 text-center">
+                                             <p className="text-gray-400 font-bold uppercase tracking-widest text-[12px]">Aucun produit ajouté au catalogue</p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -582,428 +886,7 @@ export default function Admin() {
                                     </div>
                                 </div>
 
-                                {/* Section Features */}
-                                <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-gray-100">
-                                    <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-[#059669] mb-8 underline decoration-4 decoration-yellow-400 underline-offset-8">Les 3 Incontournables</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                        {[1, 2, 3].map(num => (
-                                            <div key={num} className="space-y-4 p-6 bg-gray-50 rounded-3xl group border-2 border-transparent hover:border-emerald-200 transition-all">
-                                                <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Carte {num}</p>
-                                        <div className="aspect-auto bg-white rounded-2xl mb-4 overflow-hidden border border-gray-200 shadow-sm relative flex items-center justify-center">
-                                                    <img 
-                                                        src={(accueilSettings as any)[`feature${num}Img`] || "https://images.unsplash.com/photo-1579311822484-912f9909247f?auto=format&fit=crop&q=80&w=800"} 
-                                                        onError={(e) => {
-                                                            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&q=80&w=800";
-                                                        }}
-                                                        className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-500" 
-                                                    />
-                                                    <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                                                        <CloudUpload className="text-white" size={30} />
-                                                        <input 
-                                                            type="file" 
-                                                            className="hidden" 
-                                                            accept="image/*"
-                                                            onChange={async (e) => {
-                                                                const file = e.target.files?.[0];
-                                                                if (file) {
-                                                                    const url = await handleFileUpload(file);
-                                                                    if (url) {
-                                                                        updateAccueilField(`feature${num}Img`, url);
-                                                                    }
-                                                                }
-                                                            }}
-                                                        />
-                                                    </label>
-                                                </div>
-                                                <input 
-                                                    value={(accueilSettings as any)[`feature${num}Title`] || ""} 
-                                                    onChange={e => updateAccueilField(`feature${num}Title`, e.target.value)}
-                                                    placeholder="Titre" 
-                                                    className="w-full bg-white px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 outline-none font-black text-sm" 
-                                                />
-                                                <input 
-                                                    value={(accueilSettings as any)[`feature${num}Desc`] || ""} 
-                                                    onChange={e => updateAccueilField(`feature${num}Desc`, e.target.value)}
-                                                    placeholder="Sous-titre" 
-                                                    className="w-full bg-white px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 outline-none text-[10px] font-bold uppercase tracking-widest" 
-                                                />
-                                                <div className="relative">
-                                                     <input 
-                                                        value={(accueilSettings as any)[`feature${num}Img`] || ""} 
-                                                        onChange={e => updateAccueilField(`feature${num}Img`, e.target.value)}
-                                                        placeholder="URL Image" 
-                                                        className="w-full bg-white px-4 py-2 pr-10 rounded-xl border border-gray-200 focus:border-emerald-500 outline-none text-[9px] text-gray-400 truncate" 
-                                                    />
-                                                    {(accueilSettings as any)[`feature${num}Img`] && (
-                                                        <X 
-                                                            size={14} 
-                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 cursor-pointer"
-                                                            onClick={() => updateAccueilField(`feature${num}Img`, "")}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                                    {/* Section Vidéos */}
-                                    <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-gray-100">
-                                        <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-blue-600 mb-8 border-b-2 border-blue-50 pb-4">Vidéos & Publicité Accueil</h3>
-                                        <div className="space-y-10">
-                                            {/* Hero Media Selection */}
-                                            <div className="bg-blue-50/20 p-6 rounded-[2rem] border border-blue-100/50">
-                                                <div className="flex justify-between items-center mb-6">
-                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 ml-2">Configuration Hero Immersif</label>
-                                                    <div className="flex bg-white/50 p-1 rounded-xl border border-blue-100">
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => updateAccueilField('heroMode', 'video')}
-                                                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${(!accueilSettings.heroMode || accueilSettings.heroMode === 'video') ? 'bg-blue-500 text-white shadow-lg' : 'text-gray-400'}`}
-                                                        >Vidéo</button>
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => updateAccueilField('heroMode', 'image')}
-                                                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${accueilSettings.heroMode === 'image' ? 'bg-blue-500 text-white shadow-lg' : 'text-gray-400'}`}
-                                                        >Image</button>
-                                                    </div>
-                                                </div>
-
-                                                {(!accueilSettings.heroMode || accueilSettings.heroMode === 'video') ? (
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                                        <div>
-                                                            <div className="flex gap-2">
-                                                                <select 
-                                                                    value={accueilSettings.heroVideoId || ""} 
-                                                                    onChange={e => updateAccueilField('heroVideoId', e.target.value)}
-                                                                    className="flex-1 bg-white px-4 py-4 rounded-2xl border border-blue-100 focus:border-blue-500 outline-none font-bold text-sm appearance-none cursor-pointer uppercase shadow-sm"
-                                                                >
-                                                                    <option value="">-- Choisir une vidéo --</option>
-                                                                    {(data.videos || []).map(v => <option key={v.id} value={v.id}>{v.title}</option>)}
-                                                                </select>
-                                                                <button 
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setVideoModal({});
-                                                                        setActiveTab("videos");
-                                                                    }}
-                                                                    className="p-4 bg-blue-500 text-white rounded-2xl hover:bg-blue-600 transition-colors shadow-lg"
-                                                                    title="Nouvelle Vidéo"
-                                                                >
-                                                                    <Plus size={20} />
-                                                                </button>
-                                                            </div>
-                                                            <p className="text-[9px] text-gray-400 mt-2 ml-2 italic">Cette vidéo sera affichée en plein écran au sommet de la page d'accueil.</p>
-                                                        </div>
-                                                        <div className="aspect-video bg-black/5 rounded-xl flex items-center justify-center border-2 border-dashed border-blue-100 overflow-hidden relative">
-                                                            {accueilSettings.heroVideoId ? (
-                                                                <>
-                                                                    {(() => {
-                                                                        const v = (data.videos || []).find(vid => vid.id === accueilSettings.heroVideoId);
-                                                                        if (!v) return <div className="text-[10px] font-black uppercase text-gray-300">Vidéo introuvable</div>;
-                                                                        
-                                                                        if (v.thumbnail) {
-                                                                            return <img src={v.thumbnail || undefined} className="w-full h-full object-cover opacity-60" alt="Preview" />;
-                                                                        } else if (v.srcType === 'file') {
-                                                                            return <video src={v.src || undefined} className="w-full h-full object-cover opacity-60" />;
-                                                                        } else {
-                                                                            return <img src={`https://img.youtube.com/vi/${v.src}/0.jpg`} className="w-full h-full object-cover opacity-60" alt="Preview" />;
-                                                                        }
-                                                                    })()}
-                                                                    <div className="absolute inset-0 flex items-center justify-center flex-col p-4 text-center bg-blue-500/10 backdrop-blur-[2px]">
-                                                                        <Play size={24} className="text-blue-600 mb-2 drop-shadow-lg" />
-                                                                        <div className="text-[10px] font-black uppercase text-blue-700 bg-white/90 px-3 py-1 rounded-full shadow-sm">
-                                                                            {(data.videos || []).find(v => v.id === accueilSettings.heroVideoId)?.title}
-                                                                        </div>
-                                                                    </div>
-                                                                </>
-                                                            ) : (
-                                                                <div className="text-[10px] font-black uppercase text-gray-300">Aucune sélection</div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                                        <div>
-                                                            <div className="flex flex-col gap-3">
-                                                                <p className="text-[10px] text-gray-500 font-bold leading-relaxed mb-2 uppercase tracking-wide">Chargez une photo haute résolution pour l'arrière-plan de l'accueil.</p>
-                                                                <button 
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const input = document.createElement('input');
-                                                                        input.type = 'file';
-                                                                        input.accept = 'image/*';
-                                                                        input.onchange = async (e) => {
-                                                                            const file = (e.target as HTMLInputElement).files?.[0];
-                                                                            if (file) {
-                                                                                const url = await handleFileUpload(file);
-                                                                                if (url) updateAccueilField('heroImage', url);
-                                                                            }
-                                                                        };
-                                                                        input.click();
-                                                                    }}
-                                                                    className="bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-700 transition-all flex items-center justify-center gap-3 shadow-lg"
-                                                                >
-                                                                    <CameraIcon size={18} /> {uploading ? "Chargement..." : "Charger Photo Immersive"}
-                                                                </button>
-                                                                <input 
-                                                                    value={accueilSettings.heroImage || ""}
-                                                                    onChange={e => updateAccueilField('heroImage', e.target.value)}
-                                                                    className="bg-white px-4 py-3 rounded-2xl border border-blue-100 outline-none text-[10px] font-medium text-blue-900/50 italic truncate"
-                                                                    placeholder="Lien direct https://..."
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div className="aspect-video bg-black/5 rounded-xl flex items-center justify-center border-2 border-dashed border-blue-100 overflow-hidden relative group">
-                                                            {accueilSettings.heroImage ? (
-                                                                <>
-                                                                    <img src={accueilSettings.heroImage} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Hero Preview" />
-                                                                    <div className="absolute inset-0 bg-black/20" />
-                                                                    <div className="absolute bottom-4 left-4">
-                                                                        <div className="text-[10px] font-black uppercase text-white bg-blue-600 px-3 py-1 rounded-full shadow-lg">Aperçu Photo Hero</div>
-                                                                    </div>
-                                                                </>
-                                                            ) : (
-                                                                <div className="text-[10px] font-black uppercase text-gray-300 flex flex-col items-center gap-2">
-                                                                    <ImageIcon size={24} />
-                                                                    <span>Aucune photo</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Publicity Video Selection */}
-                                            <div className="bg-[#10b981]/5 p-6 rounded-[2rem] border border-[#10b981]/10">
-                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#059669] ml-2 block mb-4">Configuration Section Publicité</label>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                                    <div className="space-y-4">
-                                                        <div>
-                                                            <label className="text-[9px] font-black uppercase tracking-widest text-[#059669]/60 mb-2 block ml-2">Titre Publicité</label>
-                                                            <input 
-                                                                value={accueilSettings.publicityTitle || ""} 
-                                                                onChange={e => updateAccueilField('publicityTitle', e.target.value)}
-                                                                className="w-full bg-white px-5 py-3 rounded-xl border border-emerald-100 focus:border-emerald-500 outline-none font-black uppercase text-sm" 
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="text-[9px] font-black uppercase tracking-widest text-[#059669]/60 mb-2 block ml-2">Slogan / Sous-titre</label>
-                                                            <input 
-                                                                value={accueilSettings.publicitySubtitle || ""} 
-                                                                onChange={e => updateAccueilField('publicitySubtitle', e.target.value)}
-                                                                placeholder="Ex: Boostez votre visibilité" 
-                                                                className="w-full bg-white px-5 py-3 rounded-xl border border-emerald-100 focus:border-emerald-500 outline-none font-bold text-xs" 
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="text-[9px] font-black uppercase tracking-widest text-[#059669]/60 mb-2 block ml-2">Choisir la vidéo</label>
-                                                        <div className="flex gap-2">
-                                                            <select 
-                                                                value={accueilSettings.publicityVideoId || ""} 
-                                                                onChange={e => updateAccueilField('publicityVideoId', e.target.value)}
-                                                                className="flex-1 bg-white px-4 py-3 rounded-xl border border-emerald-100 focus:border-emerald-500 outline-none font-bold text-sm appearance-none cursor-pointer uppercase shadow-sm"
-                                                            >
-                                                                <option value="">-- Choisir une vidéo --</option>
-                                                                {(data.videos || []).map(v => <option key={v.id} value={v.id}>{v.title}</option>)}
-                                                            </select>
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setVideoModal({});
-                                                                    setActiveTab("videos");
-                                                                }}
-                                                                className="p-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors shadow-lg"
-                                                                title="Nouvelle Vidéo"
-                                                            >
-                                                                <Plus size={16} />
-                                                            </button>
-                                                        </div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="aspect-video bg-black/5 rounded-xl flex items-center justify-center border-2 border-dashed border-emerald-100 overflow-hidden relative">
-                                                        {accueilSettings.publicityVideoId ? (
-                                                            <>
-                                                                {(() => {
-                                                                    const v = (data.videos || []).find(vid => vid.id === accueilSettings.publicityVideoId);
-                                                                    if (!v) return <div className="text-[10px] font-black uppercase text-gray-300">Vidéo introuvable</div>;
-                                                                    
-                                                                    if (v.thumbnail) {
-                                                                        return <img src={v.thumbnail || undefined} className="w-full h-full object-cover opacity-60" alt="Preview" />;
-                                                                    } else if (v.srcType === 'file') {
-                                                                        return <video src={v.src || undefined} className="w-full h-full object-cover opacity-60" />;
-                                                                    } else {
-                                                                        return <img src={`https://img.youtube.com/vi/${v.src}/0.jpg`} className="w-full h-full object-cover opacity-60" alt="Preview" />;
-                                                                    }
-                                                                })()}
-                                                                <div className="absolute inset-0 flex items-center justify-center flex-col p-4 text-center bg-emerald-500/10 backdrop-blur-[2px]">
-                                                                    <Play size={24} className="text-emerald-600 mb-2 drop-shadow-lg" />
-                                                                    <div className="text-[10px] font-black uppercase text-emerald-700 bg-white/90 px-3 py-1 rounded-full shadow-sm">
-                                                                        {(data.videos || []).find(v => v.id === accueilSettings.publicityVideoId)?.title}
-                                                                    </div>
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <div className="text-[10px] font-black uppercase text-gray-300">Aucune vidéo sélectionnée</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="pt-10 border-t border-gray-100/50">
-                                                    <div className="flex items-center justify-between mb-6 px-2">
-                                                        <div>
-                                                            <label className="text-[11px] font-black uppercase tracking-[0.3em] text-purple-500 block mb-1">Vidéo de Présentation</label>
-                                                            <p className="text-[9px] text-gray-400 font-bold uppercase opacity-60">Cette vidéo s'affiche en grand sur la page d'accueil</p>
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setVideoModal({});
-                                                                    setVideoSrcType('file');
-                                                                    setActiveTab("videos");
-                                                                }}
-                                                                className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-full text-[9px] font-black uppercase tracking-widest hover:bg-purple-600 hover:text-white transition-all shadow-sm"
-                                                            >
-                                                                <CloudUpload size={12} /> Importer Nouvelle
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                                                        <div className="space-y-4">
-                                                            <div className="relative">
-                                                                <select 
-                                                                    value={accueilSettings.introVideoId || ""} 
-                                                                    onChange={e => updateAccueilField('introVideoId', e.target.value)}
-                                                                    className="w-full bg-white px-6 py-5 rounded-[2rem] border-2 border-purple-100 focus:border-purple-500 outline-none font-black text-xs appearance-none cursor-pointer uppercase shadow-xl transition-all hover:border-purple-200"
-                                                                >
-                                                                    <option value="">Sélectionner une vidéo existante</option>
-                                                                    {(data.videos || []).map(v => <option key={v.id} value={v.id}>{v.title}</option>)}
-                                                                </select>
-                                                                <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-purple-400">
-                                                                    <LayoutDashboard size={14} />
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="bg-purple-50/50 p-6 rounded-[2rem] border border-purple-100/50">
-                                                                <h4 className="text-[10px] font-black text-purple-600 uppercase mb-3 flex items-center gap-2">
-                                                                    <Play size={10} fill="currentColor" /> Rendu sur l'accueil
-                                                                </h4>
-                                                                <div className="space-y-2">
-                                                                    <div className="h-2 w-full bg-purple-200/50 rounded-full" />
-                                                                    <div className="h-2 w-[80%] bg-purple-200/50 rounded-full" />
-                                                                    <div className="h-2 w-[60%] bg-purple-200/50 rounded-full" />
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="relative group">
-                                                            <div className="aspect-video bg-[#0f172a] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white ring-1 ring-purple-100 relative">
-                                                                {accueilSettings.introVideoId ? (
-                                                                    <>
-                                                                        {(() => {
-                                                                            const v = (data.videos || []).find(vid => vid.id === accueilSettings.introVideoId);
-                                                                            if (!v || !v.src) return <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black uppercase text-white/20">Vidéo introuvable</div>;
-                                                                            
-                                                                            return (
-                                                                                <div className="w-full h-full">
-                                                                                    {v.srcType === 'file' ? (
-                                                                                        <video 
-                                                                                            src={v.src || undefined} 
-                                                                                            autoPlay 
-                                                                                            muted 
-                                                                                            loop 
-                                                                                            playsInline 
-                                                                                            className="w-full h-full object-cover" 
-                                                                                        />
-                                                                                    ) : (
-                                                                                        <iframe 
-                                                                                            src={`https://www.youtube.com/embed/${v.src}?autoplay=1&mute=1&loop=1&playlist=${v.src}&modestbranding=1&rel=0&controls=0`}
-                                                                                            className="w-full h-full"
-                                                                                            allow="autoplay"
-                                                                                        />
-                                                                                    )}
-                                                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
-                                                                                    <div className="absolute bottom-6 left-6 right-6 pointer-events-none">
-                                                                                        <div className="text-[8px] font-black text-purple-400 uppercase tracking-widest mb-1">Aperçu Vidéo</div>
-                                                                                        <div className="text-white font-black uppercase text-xs truncate">{v.title}</div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        })()}
-                                                                    </>
-                                                                ) : (
-                                                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-                                                                        <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-300">
-                                                                            <Play size={24} />
-                                                                        </div>
-                                                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-300/50">Aucune vidéo sélectionnée</p>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="absolute -bottom-3 -right-3 w-10 h-10 bg-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg transform rotate-12">
-                                                                <Monitor size={18} />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Section Statistiques */}
-                                    <div className="bg-[#052e16] p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl text-white">
-                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-white/10 pb-4">
-                                            <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-emerald-400">Statistiques</h3>
-                                            <input name="statsTitle" defaultValue={data.settings.statsTitle || "Statistiques 2024"} className="bg-transparent border-none outline-none text-left md:text-right font-black uppercase text-xs md:text-sm text-white/50 w-full md:w-1/2" />
-                                        </div>
-                                        <div className="space-y-6">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400/50">Valeur 1</label>
-                                            <input 
-                                                value={accueilSettings.statsValue1 || ""} 
-                                                onChange={e => updateAccueilField('statsValue1', e.target.value)}
-                                                className="w-full bg-white/5 px-4 py-3 rounded-xl border border-white/10 focus:border-emerald-500 outline-none font-black text-xl text-center" 
-                                            />
-                                            <input 
-                                                value={accueilSettings.statsLabel1 || ""} 
-                                                onChange={e => updateAccueilField('statsLabel1', e.target.value)}
-                                                placeholder="Label 1" 
-                                                className="w-full bg-transparent text-emerald-400 text-center font-black uppercase text-[10px] outline-none" 
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400/50">Valeur 2</label>
-                                            <input 
-                                                value={accueilSettings.statsValue2 || ""} 
-                                                onChange={e => updateAccueilField('statsValue2', e.target.value)}
-                                                className="w-full bg-white/5 px-4 py-3 rounded-xl border border-white/10 focus:border-emerald-500 outline-none font-black text-xl text-center" 
-                                            />
-                                            <input 
-                                                value={accueilSettings.statsLabel2 || ""} 
-                                                onChange={e => updateAccueilField('statsLabel2', e.target.value)}
-                                                placeholder="Label 2" 
-                                                className="w-full bg-transparent text-emerald-400 text-center font-black uppercase text-[10px] outline-none" 
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400/50 ml-2 block mb-2">Citation Inspirationnelle</label>
-                                            <textarea 
-                                                value={accueilSettings.statsQuote || ""} 
-                                                onChange={e => updateAccueilField('statsQuote', e.target.value)}
-                                                rows={3} 
-                                                className="w-full bg-white/5 px-6 py-4 rounded-2xl border border-white/10 focus:border-emerald-500 outline-none text-sm text-white/70 font-medium" 
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button type="submit" disabled={isSaving || uploading} className="w-full bg-[#10b981] text-white py-6 md:py-8 rounded-2xl md:rounded-[2.5rem] font-black uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all hover:scale-[1.01] flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button type="submit" disabled={isSaving || uploading} className="w-full bg-[#10b981] text-white py-6 md:py-8 rounded-2xl md:rounded-[2.5rem] font-black uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all hover:scale-[1.01] flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed">
                                     {(isSaving || uploading) ? (
                                         <div className="flex items-center gap-3">
                                             <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1027,23 +910,64 @@ export default function Admin() {
                                     <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">Catalogue Produits</h1>
                                     <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-emerald-100 underline-offset-4 text-xs md:text-base">Ajoutez et gérez les articles du marché Djapero.</p>
                                 </div>
-                                <button 
-                                    onClick={() => {
-                                        setProductModal({});
-                                        setPreviewUrl("");
-                                    }}
-                                    className="bg-emerald-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-emerald-700 transition-all shadow-xl hover:scale-105 active:scale-95 text-xs md:text-sm w-full md:w-auto"
-                                >
-                                    <Plus size={20} className="inline-block mr-2" /> Ajouter un produit
-                                </button>
+                                <div className="flex gap-4 w-full md:w-auto">
+                                    <button 
+                                        onClick={() => setBulkProductModal(true)}
+                                        className="bg-[#0f172a] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-[#10b981] transition-all shadow-xl hover:scale-105 active:scale-95 text-xs md:text-sm flex-1 md:flex-none"
+                                    >
+                                        <Box size={20} className="inline-block mr-2" /> Ajout Multiple
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setProductModal({});
+                                            setPreviewUrl("");
+                                        }}
+                                        className="bg-emerald-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-emerald-700 transition-all shadow-xl hover:scale-105 active:scale-95 text-xs md:text-sm flex-1 md:flex-none"
+                                    >
+                                        <Plus size={20} className="inline-block mr-2" /> Ajouter un produit
+                                    </button>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto mt-6">
+                                    <div className="relative flex-1 min-w-[200px]">
+                                        <Filter size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <select 
+                                            className="w-full bg-white pl-12 pr-6 py-4 rounded-2xl border border-emerald-100 outline-none font-bold text-xs uppercase tracking-widest text-[#0f172a] appearance-none shadow-sm focus:border-emerald-500 transition-all"
+                                            value={categoryFilter}
+                                            onChange={e => setCategoryFilter(e.target.value)}
+                                        >
+                                            <option value="Tous">Toutes Catégories</option>
+                                            <option value="Frais">Frais</option>
+                                            <option value="Epicerie">Épicerie</option>
+                                            <option value="Surgelés">Surgelés</option>
+                                            <option value="Boissons">Boissons</option>
+                                            <option value="Equipements">Équipements</option>
+                                            <option value="Autres">Autres</option>
+                                        </select>
+                                    </div>
+                                    <div className="relative flex-[2] min-w-[250px]">
+                                        <Plus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 rotate-45" />
+                                        <input 
+                                            className="w-full bg-white pl-12 pr-6 py-4 rounded-2xl border border-emerald-100 outline-none font-bold text-sm tracking-tight text-[#0f172a] shadow-sm focus:border-emerald-500 transition-all placeholder:text-gray-200"
+                                            placeholder="Rechercher un produit..."
+                                            value={searchQuery}
+                                            onChange={e => setSearchQuery(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="admin-product-grid">
-                                {(data.products || []).map(p => (
+                                {(data.products || [])
+                                    .filter(p => {
+                                        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.toLowerCase().includes(searchQuery.toLowerCase());
+                                        const matchesCategory = categoryFilter === "Tous" || p.category === categoryFilter;
+                                        return matchesSearch && matchesCategory;
+                                    })
+                                    .map(p => (
                                     <div key={p.id} className="admin-product-card group">
-                                        <div className="h-auto bg-gray-50 flex items-center justify-center p-0 relative">
-                                            <img src={p.imageUrl || undefined} alt={p.name} className="w-full h-auto object-cover group-hover:scale-110 transition-transform duration-500" />
-                                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="h-auto aspect-square bg-gray-50 flex items-center justify-center p-6 relative group-hover:bg-emerald-50/50 transition-colors">
+                                                <img src={p.imageUrl || undefined} alt={p.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500" />
+                                                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={() => {
                                                     setProductModal(p);
                                                     setPreviewUrl(p.imageUrl || "");
@@ -1421,9 +1345,13 @@ export default function Admin() {
                                     e.preventDefault();
                                     const formData = new FormData(e.currentTarget);
                                     const success = await updateSettings({
-                                        ...accueilSettings,
+                                        ...data.settings,
                                         whatsapp: formData.get("whatsapp") as string,
                                         call: formData.get("call") as string,
+                                        publicityVideoId: formData.get("publicityVideoId") as string,
+                                        publicityTitle: formData.get("publicityTitle") as string,
+                                        publicitySubtitle: formData.get("publicitySubtitle") as string,
+                                        adminCustomCode: formData.get("adminCustomCode") as string,
                                     });
                                     if (success) {
                                         alert("Paramètres enregistrées avec succès !");
@@ -1432,11 +1360,32 @@ export default function Admin() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         <div className="space-y-3">
                                             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Numéro WhatsApp</label>
-                                            <input name="whatsapp" defaultValue={data.settings.whatsapp} className="w-full bg-emerald-50/30 px-6 py-5 rounded-2xl border-2 border-transparent focus:border-[#10b981] focus:bg-white outline-none transition-all font-black text-lg tracking-tighter" placeholder="228XXXXXXXX" />
+                                            <input name="whatsapp" defaultValue={data.settings.whatsapp} className="admin-input-refined" placeholder="228XXXXXXXX" />
                                         </div>
                                         <div className="space-y-3">
                                             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Téléphone d'Appel</label>
-                                            <input name="call" defaultValue={data.settings.call} className="w-full bg-emerald-50/30 px-6 py-5 rounded-2xl border-2 border-transparent focus:border-[#10b981] focus:bg-white outline-none transition-all font-black text-lg tracking-tighter" placeholder="+228 92..." />
+                                            <input name="call" defaultValue={data.settings.call} className="admin-input-refined" placeholder="+228 92..." />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-6 pt-10 border-t border-gray-100">
+                                        <div>
+                                            <h3 className="text-xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-2 underline decoration-emerald-500 underline-offset-4">Publicité Vidéo Principale</h3>
+                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest opacity-80">Configurez la vidéo mise en avant sur la page d'accueil.</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-3">
+                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">ID Vidéo YouTube / FB</label>
+                                                <input name="publicityVideoId" defaultValue={data.settings.publicityVideoId} className="admin-input-refined" placeholder="ID de la vidéo" />
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Titre Publicité</label>
+                                                <input name="publicityTitle" defaultValue={data.settings.publicityTitle} className="admin-input-refined" placeholder="Titre accrocheur" />
+                                            </div>
+                                            <div className="col-span-full space-y-3">
+                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Sous-titre / Description</label>
+                                                <textarea name="publicitySubtitle" defaultValue={data.settings.publicitySubtitle} className="admin-input-refined h-20 py-4" placeholder="Plus de détails..." />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1537,6 +1486,23 @@ export default function Admin() {
                                         </div>
                                     </div>
 
+                                    <div className="space-y-6 pt-10 border-t border-gray-100">
+                                        <div>
+                                            <h3 className="text-xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-2 underline decoration-emerald-500 underline-offset-4">Code Personnalisé</h3>
+                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest opacity-80">Ajoutez du code (HTML, CSS avec balises &lt;style&gt;, ou scripts) pour transformer globalement cette page d'administration.</p>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">HTML / CSS de l'Interface</label>
+                                            <textarea 
+                                                name="adminCustomCode" 
+                                                defaultValue={data.settings.adminCustomCode} 
+                                                spellCheck={false}
+                                                className="w-full bg-[#0f172a] text-emerald-400 border border-transparent focus:border-[#10b981] rounded-2xl px-6 py-6 outline-none font-mono text-sm transition-all h-[400px] leading-relaxed shadow-inner" 
+                                                placeholder="<!-- Écrivez votre code ici -->&#10;<style>&#10;  body { background: white; }&#10;</style>&#10;<div>Mon Dashboard Custom</div>" 
+                                            />
+                                        </div>
+                                    </div>
+
                                     <button type="submit" className="w-full bg-[#0f172a] text-white py-6 rounded-2xl font-black uppercase tracking-widest hover:bg-[#10b981] transition-all flex items-center justify-center gap-4 shadow-xl transform hover:scale-[1.02] active:scale-95 group mb-4">
                                         <Save size={24} className="group-hover:rotate-12 transition-transform" /> Enregistrer les Paramètres
                                     </button>
@@ -1560,7 +1526,319 @@ export default function Admin() {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                <AnimatePresence>
+                    {selectedDetail && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+                            <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setSelectedDetail(null)}
+                                className="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-md"
+                            />
+                            
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                className="relative w-full max-w-5xl bg-white rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh] z-10"
+                            >
+                                <button 
+                                    onClick={() => setSelectedDetail(null)}
+                                    className="absolute top-6 right-6 z-50 p-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-colors"
+                                >
+                                    <X size={24} className="text-gray-900" />
+                                </button>
+
+                                {/* Left Side: Image */}
+                                <div className="w-full md:w-1/2 bg-[#f8fafc] p-6 md:p-14 flex items-center justify-center relative">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/20 to-transparent" />
+                                    <motion.img 
+                                        src={selectedDetail.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
+                                        alt={selectedDetail.name}
+                                        className="max-w-[85%] max-h-[85%] object-contain drop-shadow-[0_30px_60px_rgba(16,185,129,0.2)]"
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: "spring", damping: 15 }}
+                                    />
+                                </div>
+
+                                {/* Right Side: Content */}
+                                <div className="w-full md:w-1/2 p-8 md:p-14 flex flex-col overflow-y-auto">
+                                    <div className="mb-8">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="w-8 h-1 bg-emerald-500 rounded-full" />
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">Aperçu Dashboard</span>
+                                        </div>
+                                        <h2 className="text-3xl md:text-5xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-4">
+                                            {selectedDetail.name}
+                                        </h2>
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100">
+                                                <span className="text-2xl font-black text-emerald-600">
+                                                    {selectedDetail.price} 
+                                                    {!selectedDetail.price.toString().toUpperCase().includes('FCFA') && (
+                                                        <span className="text-xs opacity-50 ml-1">FCFA</span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                            <span className="text-gray-400 font-bold text-sm uppercase tracking-widest">Disponible</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="group bg-[#f8fafc] p-8 rounded-[2.5rem] mb-10 border border-[#e2e8f0]/40 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
+                                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/40 mb-4 flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                            Description du Catalogue
+                                        </h4>
+                                        <p className="text-gray-500 font-medium leading-relaxed text-base relative z-10">
+                                            {selectedDetail.description || "Ce produit d'exception a été sélectionné pour sa qualité exceptionnelle et sa fraîcheur garantie. Idéal pour une alimentation saine et équilibrée, il représente le meilleur de notre terroir."}
+                                        </p>
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row gap-4 mt-auto pt-10 border-t border-gray-100">
+                                        <a 
+                                            href={`https://wa.me/${data.settings.whatsapp}?text=Bonjour Djapero, je souhaite commander en direct : ${selectedDetail.name}`}
+                                            target="_blank"
+                                            className="flex-grow flex items-center justify-center gap-6 py-6 bg-[#25D366] hover:bg-black text-white rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-[13px] shadow-[0_20px_50px_rgba(37,211,102,0.3)] transition-all hover:scale-[1.03] active:scale-[0.97] group relative overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 skew-x-12" />
+                                            <Phone size={28} className="group-hover:rotate-12 transition-transform" />
+                                            Commander via WhatsApp
+                                        </a>
+                                        <a 
+                                            href={`tel:${data.settings.call}`} 
+                                            className="px-10 flex items-center justify-center gap-4 py-6 bg-white border-2 border-[#0f172a]/5 text-[#0f172a] hover:bg-gray-50 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-[13px] transition-all hover:border-emerald-500 shadow-xl group"
+                                        >
+                                            <Phone size={24} className="text-emerald-500 group-hover:scale-110 transition-transform" />
+                                            Appeler
+                                        </a>
+                                    </div>
+                                    <p className="text-center mt-6 text-[9px] font-black text-gray-300 uppercase tracking-[0.3em]">
+                                        Livraison Express • Djapero Admin Dashboard
+                                    </p>
+                                </div>
+
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
             </main>
+
+            {/* Bulk Product Modal */}
+            {bulkProductModal && (
+                <div className="modal-overlay px-4 py-8" onClick={() => setBulkProductModal(false)}>
+                    <motion.div 
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="modal-card p-6 md:p-10 bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-5xl shadow-2xl relative overflow-y-auto max-h-full custom-scrollbar"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-black transition-colors" onClick={() => setBulkProductModal(false)}><X size={24}/></button>
+                        
+                        <div className="mb-10">
+                            <h2 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter underline decoration-emerald-500 underline-offset-8">Enregistrement Groupé</h2>
+                            <p className="text-gray-400 font-bold mt-4 uppercase tracking-widest text-[10px]">Ajoutez rapidement une liste de produits différents au catalogue.</p>
+                        </div>
+
+                        {/* Quick Paste Area */}
+                        <div className="mb-10 p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
+                            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-600 mb-4 flex items-center gap-2">
+                                <Plus size={14} /> Mode Rapide (Copier/Coller)
+                            </h3>
+                            <textarea 
+                                className="w-full h-32 bg-white rounded-2xl p-6 text-sm font-bold border border-emerald-100 outline-none focus:border-emerald-500 transition-all placeholder:text-gray-200"
+                                placeholder={"Nom Produit, Prix\nEx: Tomates Bio, 2500\nEx: Vanille Pure, 5000"}
+                                onChange={(e) => {
+                                    const text = e.target.value;
+                                    if (!text) return;
+                                    const lines = text.split('\n');
+                                    const newBatch = lines.map(line => {
+                                        const parts = line.split(',');
+                                        if (parts.length >= 2) {
+                                            return { 
+                                                name: parts[0].trim(), 
+                                                price: parts[1].trim(), 
+                                                category: "Frais", 
+                                                description: parts[2] ? parts[2].trim() : "",
+                                                imageUrl: "" 
+                                            };
+                                        }
+                                        return null;
+                                    }).filter(r => r !== null);
+
+                                    if (newBatch.length > 0) {
+                                        setBulkRows([...bulkRows.filter(r => r.name || r.price), ...newBatch as any]);
+                                        e.target.value = ""; // Reset textarea
+                                    }
+                                }}
+                            ></textarea>
+                            <p className="mt-3 text-[10px] text-emerald-400 font-bold uppercase tracking-widest italic">Les lignes valides (Nom, Prix) seront ajoutées au tableau ci-dessous.</p>
+                        </div>
+
+                        <div className="overflow-x-auto mb-8 bg-gray-50/50 rounded-3xl p-4 md:p-8 border border-gray-100">
+                            <table className="w-full min-w-[800px]">
+                                <thead>
+                                    <tr className="text-left">
+                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4 w-24">Image</th>
+                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Nom du Produit</th>
+                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Prix (FCFA)</th>
+                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Catégorie</th>
+                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Description</th>
+                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4 w-12"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {bulkRows.map((row, idx) => (
+                                        <tr key={idx} className="group border-b border-gray-50/50">
+                                            <td className="py-2 px-2">
+                                                <div 
+                                                    className="w-20 h-20 bg-white rounded-2xl border border-gray-100 flex items-center justify-center overflow-hidden cursor-pointer hover:border-emerald-500 transition-all"
+                                                    onClick={() => {
+                                                        const input = document.createElement('input');
+                                                        input.type = 'file';
+                                                        input.accept = 'image/*';
+                                                        input.onchange = async (e) => {
+                                                            const file = (e.target as HTMLInputElement).files?.[0];
+                                                            if (file) {
+                                                                const url = await handleFileUpload(file);
+                                                                if (url) {
+                                                                    const newRows = [...bulkRows];
+                                                                    newRows[idx].imageUrl = url;
+                                                                    setBulkRows(newRows);
+                                                                }
+                                                            }
+                                                        };
+                                                        input.click();
+                                                    }}
+                                                >
+                                                    {row.imageUrl ? (
+                                                        <img src={row.imageUrl} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <CameraIcon size={20} className="text-gray-200" />
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="py-2 px-2">
+                                                <input 
+                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-black uppercase tracking-tighter text-sm"
+                                                    placeholder="Tomates Bio, Vanille..."
+                                                    value={row.name}
+                                                    onChange={e => {
+                                                        const newRows = [...bulkRows];
+                                                        newRows[idx].name = e.target.value;
+                                                        setBulkRows(newRows);
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="py-2 px-2">
+                                                <input 
+                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-black text-sm"
+                                                    placeholder="2500"
+                                                    value={row.price}
+                                                    onChange={e => {
+                                                        const newRows = [...bulkRows];
+                                                        newRows[idx].price = e.target.value;
+                                                        setBulkRows(newRows);
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="py-2 px-2">
+                                                <select 
+                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-bold text-xs uppercase tracking-widest text-gray-500 appearance-none"
+                                                    value={row.category}
+                                                    onChange={e => {
+                                                        const newRows = [...bulkRows];
+                                                        newRows[idx].category = e.target.value;
+                                                        setBulkRows(newRows);
+                                                    }}
+                                                >
+                                                    <option value="Frais">Frais</option>
+                                                    <option value="Epicerie">Épicerie</option>
+                                                    <option value="Surgelés">Surgelés</option>
+                                                    <option value="Boissons">Boissons</option>
+                                                    <option value="Equipements">Équipements</option>
+                                                    <option value="Autres">Autres</option>
+                                                </select>
+                                            </td>
+                                            <td className="py-2 px-2">
+                                                <input 
+                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-medium text-xs"
+                                                    placeholder="Description courte..."
+                                                    value={row.description}
+                                                    onChange={e => {
+                                                        const newRows = [...bulkRows];
+                                                        newRows[idx].description = e.target.value;
+                                                        setBulkRows(newRows);
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="py-2 px-2">
+                                                <button 
+                                                    onClick={() => {
+                                                        if (bulkRows.length > 1) {
+                                                            setBulkRows(bulkRows.filter((_, i) => i !== idx));
+                                                        }
+                                                    }}
+                                                    className="w-12 h-12 flex items-center justify-center text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex flex-col md:flex-row gap-6">
+                            <button 
+                                onClick={() => setBulkRows([...bulkRows, { name: "", price: "", category: "Frais", description: "" }])}
+                                className="flex-1 py-6 border-2 border-dashed border-emerald-200 rounded-3xl text-emerald-600 font-black uppercase tracking-widest text-xs hover:bg-emerald-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Plus size={20} /> Ajouter une Ligne
+                            </button>
+                            <button 
+                                disabled={isSaving}
+                                onClick={async () => {
+                                    const validRows = bulkRows.filter(r => r.name && r.price);
+                                    if (validRows.length === 0) return alert("Veuillez remplir au moins un produit complet.");
+                                    
+                                    setIsSaving(true);
+                                    let successCount = 0;
+                                    for (const row of validRows) {
+                                        const success = await addProduct({
+                                            ...row,
+                                            imageUrl: "",
+                                            badge: "",
+                                            createdAt: Date.now()
+                                        });
+                                        if (success) successCount++;
+                                    }
+                                    setIsSaving(false);
+                                    
+                                    if (successCount > 0) {
+                                        alert(`✅ ${successCount} produits ajoutés avec succès !`);
+                                        setBulkProductModal(false);
+                                        setBulkRows([{ name: "", price: "", category: "Frais", description: "" }]);
+                                    }
+                                }}
+                                className="flex-[2] py-6 bg-emerald-600 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
+                            >
+                                {isSaving ? (
+                                    <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <>
+                                        <Save size={20} /> Finaliser l'Importation ({bulkRows.filter(r => r.name && r.price).length})
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
 
             {/* Product Modal */}
             {productModal && (
@@ -2121,6 +2399,257 @@ export default function Admin() {
                     </motion.div>
                 </div>
             )}
+            {/* Hero Modal */}
+            {heroModal && (
+                <div className="modal-overlay px-4 py-8" onClick={() => setHeroModal(null)}>
+                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-12 !bg-[#064e3b] rounded-[3rem] md:rounded-[4rem] w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-full no-scrollbar !text-white" onClick={e => e.stopPropagation()}>
+                        <button className="absolute top-8 right-8 text-white/40 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10" onClick={() => setHeroModal(null)}><X size={28}/></button>
+                        
+                        <div className="mb-10">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="w-10 h-1 bg-[#a3e635] rounded-full" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-[#a3e635]">Hero Header Design</span>
+                            </div>
+                            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.85] text-white">
+                                {heroModal.id ? "Modifier l'En-tête." : "Nouvel En-tête."}
+                            </h2>
+                        </div>
+
+                        <div className="mb-10 w-full h-64 bg-white/5 rounded-[2.5rem] flex items-center justify-center p-6 border-2 border-dashed border-white/10 overflow-hidden relative group shadow-inner transition-all">
+                            {uploading ? (
+                                <div className="text-center w-full px-12">
+                                    <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden mb-4">
+                                        <motion.div 
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${uploadProgress}%` }}
+                                            className="h-full bg-[#a3e635] shadow-[0_0_15px_rgba(163,230,53,0.5)]"
+                                        />
+                                    </div>
+                                    <p className="text-[#a3e635] text-[10px] font-black uppercase tracking-widest animate-pulse">Importation Djapero... {uploadProgress}%</p>
+                                </div>
+                            ) : (previewUrl || heroModal.imageUrl) ? (
+                                <img src={previewUrl || heroModal.imageUrl} className="w-full h-full object-cover rounded-3xl" onError={() => setPreviewUrl("")} />
+                            ) : (
+                                <div className="text-white/20 flex flex-col items-center gap-4">
+                                    <Monitor size={48} className="opacity-20" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Aperçu Visuel En-tête</p>
+                                </div>
+                            )}
+                            {!uploading && (
+                                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer backdrop-blur-sm">
+                                    <CloudUpload className="text-white" size={48} />
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        accept="image/*"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const url = await handleFileUpload(file);
+                                                if (url) setPreviewUrl(url);
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            )}
+                        </div>
+
+                        <form className="space-y-8" onSubmit={async (e) => {
+                            e.preventDefault();
+                            try {
+                                const formData = new FormData(e.currentTarget);
+                                const heroData = {
+                                    title: formData.get("title") as string,
+                                    subtitle: formData.get("subtitle") as string,
+                                    heading: formData.get("heading") as string,
+                                    imageUrl: previewUrl || (formData.get("imageUrl") as string) || (heroModal.imageUrl as string),
+                                    videoUrl: formData.get("videoUrl") as string,
+                                    active: formData.get("active") === "true",
+                                    createdAt: heroModal.createdAt || Date.now()
+                                };
+
+                                if (!heroData.imageUrl) {
+                                    alert("❌ Veuillez ajouter une image pour l'en-tête.");
+                                    return;
+                                }
+
+                                if (heroModal.id) {
+                                    await updateHeroBanner(heroModal.id, heroData);
+                                } else {
+                                    await addHeroBanner(heroData as any);
+                                }
+                                setHeroModal(null);
+                                setPreviewUrl("");
+                                alert("✅ En-tête dashboard mis à jour !");
+                            } catch (err: any) {
+                                alert(`❌ Erreur: ${err.message}`);
+                            }
+                        }}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Petit Titre (Logo)</label>
+                                        <input required name="title" defaultValue={heroModal.title || "Tableau de Bord."} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-black" placeholder="Tableau de Bord." />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Sous-Titre (Description)</label>
+                                        <input required name="subtitle" defaultValue={heroModal.subtitle || "ESPACE D'EXCELLENCE DJAPERO."} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-bold text-xs uppercase tracking-widest" placeholder="ESPACE D'EXCELLENCE..." />
+                                    </div>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Statut</label>
+                                        <select name="active" defaultValue={heroModal.active === false ? "false" : "true"} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-black appearance-none cursor-pointer">
+                                            <option value="true" className="bg-[#064e3b]">Actif (Affiché)</option>
+                                            <option value="false" className="bg-[#064e3b]">Inactif (Masqué)</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Gros Titre (Slogan)</label>
+                                        <input name="heading" defaultValue={heroModal.heading || "COMMANDER VOS FAVORIS."} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-black text-xl italic" placeholder="COMMANDER VOS FAVORIS." />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">URL Vidéo Intro (YouTube ou Direct)</label>
+                                        <input name="videoUrl" defaultValue={heroModal.videoUrl} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all text-xs" placeholder="https://youtube.com/watch?v=... ou .mp4" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">URL Image Header</label>
+                                <input name="imageUrl" defaultValue={heroModal.imageUrl} onChange={(e) => setPreviewUrl(e.target.value)} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all text-xs" placeholder="https://..." />
+                            </div>
+                            <button 
+                                id="submit-hero-btn"
+                                type="submit" 
+                                className="w-full bg-[#a3e635] text-black py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-white transition-all hover:scale-[1.02]"
+                            >
+                                {heroModal.id ? "Enregistrer les modifications" : "Publier l'En-tête"}
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+            {/* Ad Modal */}
+            {adModal && (
+                <div className="modal-overlay px-4 py-8" onClick={() => setAdModal(null)}>
+                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-12 bg-white rounded-[3rem] md:rounded-[4rem] w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-full no-scrollbar" onClick={e => e.stopPropagation()}>
+                        <button className="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50" onClick={() => setAdModal(null)}><X size={28}/></button>
+                        
+                        <div className="mb-10">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="w-10 h-1 bg-pink-500 rounded-full" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-pink-600">Advertising Elite</span>
+                            </div>
+                            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.85] text-[#0f172a]">
+                                {adModal.id ? "Modifier l'Affiche." : "Nouvelle Affiche."}
+                            </h2>
+                        </div>
+
+                        <div className="mb-10 w-full h-64 bg-gray-50 rounded-[2.5rem] flex items-center justify-center p-6 border-2 border-dashed border-gray-100 overflow-hidden relative group shadow-inner transition-all">
+                            {uploading ? (
+                                <div className="text-center w-full px-12">
+                                    <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden mb-4">
+                                        <motion.div 
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${uploadProgress}%` }}
+                                            className="h-full bg-pink-500"
+                                        />
+                                    </div>
+                                    <p className="text-pink-600 text-[10px] font-black uppercase tracking-widest animate-pulse">Envoi de l'affiche... {uploadProgress}%</p>
+                                </div>
+                            ) : (previewUrl || adModal.imageUrl) ? (
+                                <img src={previewUrl || adModal.imageUrl} className="w-full h-full object-cover rounded-3xl" onError={() => setPreviewUrl("")} />
+                            ) : (
+                                <div className="text-gray-300 flex flex-col items-center gap-4">
+                                    <ImageIcon size={48} className="opacity-20" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Aperçu de l'affiche</p>
+                                </div>
+                            )}
+                            {!uploading && (
+                                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer backdrop-blur-sm">
+                                    <CloudUpload className="text-white" size={48} />
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        accept="image/*"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const url = await handleFileUpload(file);
+                                                if (url) setPreviewUrl(url);
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            )}
+                        </div>
+
+                        <form className="space-y-8" onSubmit={async (e) => {
+                            e.preventDefault();
+                            try {
+                                const formData = new FormData(e.currentTarget);
+                                const adData = {
+                                    title: formData.get("title") as string,
+                                    subtitle: formData.get("subtitle") as string,
+                                    imageUrl: previewUrl || (formData.get("imageUrl") as string) || (adModal.imageUrl as string),
+                                    link: formData.get("link") as string,
+                                    active: formData.get("active") === "true",
+                                    createdAt: adModal.createdAt || Date.now()
+                                };
+
+                                if (!adData.imageUrl) {
+                                    alert("❌ Veuillez ajouter une image pour l'affiche.");
+                                    return;
+                                }
+
+                                if (adModal.id) {
+                                    await updateAd(adModal.id, adData);
+                                } else {
+                                    await addAd(adData as any);
+                                }
+                                setAdModal(null);
+                                setPreviewUrl("");
+                                alert("✅ Affiche enregistrée !");
+                            } catch (err: any) {
+                                alert(`❌ Erreur: ${err.message}`);
+                            }
+                        }}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Titre de l'affiche *</label>
+                                        <input required name="title" defaultValue={adModal.title} className="admin-input-refined text-lg" placeholder="EX: PROMO LADOUM" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Sous-titre / Info *</label>
+                                        <input required name="subtitle" defaultValue={adModal.subtitle} className="admin-input-refined" placeholder="EX: -20% SUR TOUTE LA FERME" />
+                                    </div>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Statut</label>
+                                        <select name="active" defaultValue={adModal.active === false ? "false" : "true"} className="admin-input-refined">
+                                            <option value="true">Active (Affichée)</option>
+                                            <option value="false">Inactive (Masquée)</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Lien (Action)</label>
+                                        <input name="link" defaultValue={adModal.link} className="admin-input-refined" placeholder="/marché" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">URL Image Alternative</label>
+                                <input name="imageUrl" defaultValue={adModal.imageUrl} onChange={(e) => setPreviewUrl(e.target.value)} className="admin-input-refined text-xs" placeholder="https://..." />
+                            </div>
+                            <button type="submit" className="w-full bg-pink-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-pink-600 transition-all hover:scale-[1.02]">
+                                Enregistrer l'affiche
+                            </button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
             {/* Market Modal */}
             {marketModal && (
                 <div className="modal-overlay px-4 py-8" onClick={() => setMarketModal(null)}>
@@ -2400,7 +2929,7 @@ export default function Admin() {
                         </button>
 
                         <div className="mb-8">
-                            <h2 className="text-3xl font-black tracking-tighter text-[#0f172a] uppercase leading-none mb-2">Nouvelle <br/><span className="text-red-600">Alerte.</span></h2>
+                            <h2 className="text-3xl font-black tracking-tighter text-[#0f172a] uppercase leading-none mb-2">Nouvelle <br/><span className="text-red-600" style={{ fontStyle: 'normal' }}>Alerte.</span></h2>
                             <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest pl-1">Diffusez un message à la communauté.</p>
                         </div>
 

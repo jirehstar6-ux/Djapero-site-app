@@ -16,25 +16,24 @@ export default function Products() {
     );
 
     return (
-        <div className="dashboard-container pt-20">
-            <main className="main-content">
+        <div className="w-full pt-20 px-4 md:px-10">
+            <main className="w-full pb-20">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
                     <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-8 h-1 bg-emerald-500 rounded-full" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">Sélection Premium</span>
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-16 h-2 bg-emerald-500 rounded-full" />
+                            <span className="text-[12px] font-black uppercase tracking-[0.5em] text-emerald-600">Catalogue Intégral</span>
                         </div>
-                        <h2 className="text-4xl md:text-5xl font-black tracking-tighter text-[#0f172a] uppercase leading-none">
-                            Nos Produits <span className="text-emerald-500">Frais</span>
+                        <h2 className="text-5xl md:text-8xl font-black tracking-tighter text-[#0f172a] uppercase leading-none">
+                            La <span className="text-emerald-500">Boutique</span>
                         </h2>
-                        <p className="text-gray-400 font-medium mt-2">De la terre à votre table, fraîcheur garantie.</p>
                     </div>
-                    <div className="w-full md:max-w-md relative group">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+                    <div className="w-full md:max-w-2xl relative group">
+                        <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-emerald-500 transition-colors" size={24} />
                         <input 
                             type="text" 
-                            placeholder="Rechercher un produit..." 
-                            className="w-full pl-14 pr-8 py-4 rounded-2xl border-2 border-transparent bg-white shadow-xl shadow-emerald-900/5 focus:border-emerald-500 outline-none transition-all font-bold placeholder:text-gray-300"
+                            placeholder="RECHERCHER UN PRODUIT DANS TOUTE LA BOUTIQUE..." 
+                            className="w-full pl-20 pr-10 py-7 rounded-[3rem] border-2 border-transparent bg-white shadow-2xl shadow-emerald-900/5 focus:border-emerald-500 outline-none transition-all font-black text-sm placeholder:text-gray-200 tracking-widest uppercase"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
@@ -42,72 +41,55 @@ export default function Products() {
                 </div>
 
                 {filteredProducts.length === 0 ? (
-                    <div className="text-center py-32 bg-white rounded-[3rem] border-2 border-dashed border-emerald-100">
-                        <ShoppingBag size={80} className="mx-auto mb-6 text-emerald-100" />
-                        <p className="text-2xl font-black text-gray-300 uppercase tracking-tighter">Aucun produit trouvé</p>
+                    <div className="text-center py-40 bg-white rounded-[4rem] border-2 border-dashed border-emerald-50 shadow-inner">
+                        <ShoppingBag size={80} className="mx-auto mb-6 text-emerald-50" />
+                        <p className="text-3xl font-black text-gray-200 uppercase tracking-tighter">Aucun produit dans cette sélection</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 4xl:grid-cols-10 gap-4 md:gap-8">
                         {filteredProducts.map((p, idx) => (
                             <motion.div 
                                 key={p.id}
-                                initial={{ opacity: 0, y: 20 }}
+                                initial={{ opacity: 0, y: 30 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
+                                transition={{ delay: idx * 0.03 }}
                                 onClick={() => setSelectedProduct(p)}
-                                className="group relative bg-white rounded-[2.5rem] p-6 shadow-xl shadow-emerald-900/5 border border-emerald-50/50 hover:shadow-2xl hover:shadow-emerald-900/10 transition-all flex flex-col h-full cursor-pointer"
+                                className="group relative bg-[#0f172a] rounded-[3rem] p-6 border border-white/5 hover:border-[#a3e635]/30 shadow-[0_40px_80px_rgba(0,0,0,0.4)] transition-all flex flex-col h-full cursor-pointer hover:-translate-y-3 duration-500"
                             >
-                                <div className="relative aspect-square rounded-[2rem] overflow-hidden bg-[#fbfbfb] mb-6 flex items-center justify-center p-4 group-hover:bg-emerald-50/40 transition-colors">
+                                <div className="relative aspect-square rounded-[2rem] overflow-hidden mb-8">
                                     <motion.img 
                                         src={p.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
                                         alt={p.name} 
-                                        className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.1)]"
-                                        whileHover={{ scale: 1.1, rotate: 2 }}
-                                        transition={{ type: "spring", stiffness: 300 }}
+                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                                     />
-                                    {p.badge && (
-                                        <div className="absolute top-4 left-4 z-10">
-                                            <span className="bg-[#fb923c] text-white text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-xl shadow-orange-500/20">
-                                                {p.badge}
-                                            </span>
-                                        </div>
-                                    )}
-                                    <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-md px-4 py-2 rounded-2xl font-black text-emerald-600 text-[12px] shadow-xl border border-emerald-50 flex items-center">
-                                        {p.price} 
-                                        {!p.price.toString().toUpperCase().includes('FCFA') && (
-                                            <span className="text-[8px] opacity-40 uppercase tracking-widest ml-1">FCFA</span>
-                                        )}
+                                    <div className="absolute top-4 right-4 bg-[#a3e635] text-black px-4 py-1.5 rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg z-10">
+                                        NOUVEAU
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col flex-grow">
-                                    <h3 className="text-xl font-black text-[#0f172a] mb-2 uppercase tracking-tighter leading-tight group-hover:text-emerald-600 transition-colors h-14 line-clamp-2">{p.name}</h3>
-                                    <div className="min-h-[80px]">
-                                        <p className="text-gray-400 text-xs font-medium line-clamp-3 mb-6 leading-relaxed bg-neutral-50/50 p-4 rounded-xl border border-neutral-100/50 flex-grow">
-                                            {p.description || "Un produit d'exception sélectionné pour sa fraîcheur et sa qualité incomparable."}
-                                        </p>
+                                <div className="px-2 pb-2 flex-grow">
+                                    <div className="flex justify-between items-baseline mb-1">
+                                        <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tighter truncate max-w-[70%]">{p.name}</h3>
+                                        <span className="text-xl md:text-2xl font-black text-[#a3e635] tracking-tighter">
+                                            {p.price} 
+                                            {!p.price.toString().toUpperCase().includes('FCFA') && (
+                                                <span className="text-[10px] opacity-40 uppercase tracking-widest ml-1 font-black">FCFA</span>
+                                            )}
+                                        </span>
                                     </div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-8">
+                                        Qualité Djapero • Stock Disponible
+                                    </p>
                                     
-                                    <div className="mt-auto space-y-3">
-                                        <a 
-                                            href={`https://wa.me/${data.settings.whatsapp}?text=Bonjour, je souhaite commander : ${p.name}`}
-                                            target="_blank"
-                                            className="flex items-center justify-center gap-3 w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                        >
-                                            <WhatsApp size={16} /> WhatsApp
-                                        </a>
-                                        <a 
-                                            href={`tel:${data.settings.call}`} 
-                                            className="flex items-center justify-center gap-3 w-full py-4 bg-white hover:bg-neutral-50 text-gray-600 rounded-2xl font-black uppercase tracking-widest text-[10px] border-2 border-neutral-100 transition-all hover:border-emerald-200"
-                                        >
-                                            <Phone size={16} /> Appeler
-                                        </a>
-                                    </div>
+                                    <button className="w-full pt-[27px] pb-[18px] pl-0 ml-[-4px] mr-[25px] rounded-2xl bg-white text-black font-black uppercase text-[10px] tracking-widest hover:bg-[#a3e635] transition-all shadow-xl">
+                                        Détails du Produit
+                                    </button>
                                 </div>
                             </motion.div>
                         ))}
                     </div>
                 )}
+
 
                 <AnimatePresence>
                     {selectedProduct && (
@@ -134,15 +116,19 @@ export default function Products() {
                                 </button>
 
                                 {/* Left Side: Image */}
-                                <div className="w-full md:w-1/2 bg-[#f8fafc] p-8 md:p-14 flex items-center justify-center relative">
+                                <div className="w-full md:w-1/2 bg-[#f8fafc] flex items-center justify-center relative overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/20 to-transparent" />
                                     <motion.img 
                                         layoutId={`img-${selectedProduct.id}`}
                                         src={selectedProduct.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
                                         alt={selectedProduct.name}
-                                        className="max-w-full max-h-full object-contain drop-shadow-[0_40px_80px_rgba(0,0,0,0.15)]"
+                                        className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: "spring", damping: 15 }}
                                     />
                                     {selectedProduct.badge && (
-                                        <div className="absolute top-8 left-8">
+                                        <div className="absolute top-8 left-8 z-10">
                                             <span className="bg-[#fb923c] text-white text-[10px] font-black px-6 py-2 rounded-full uppercase tracking-[0.2em] shadow-xl">
                                                 {selectedProduct.badge}
                                             </span>
@@ -173,42 +159,40 @@ export default function Products() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-6 mb-10 flex-grow">
-                                        <div>
-                                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400 mb-3">Description</h4>
-                                            <p className="text-gray-500 font-medium leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
-                                                {selectedProduct.description || "Ce produit a été sélectionné pour sa qualité exceptionnelle et sa fraîcheur garantie. Idéal pour une alimentation saine et équilibrée."}
-                                            </p>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100/50">
-                                                <div className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Catégorie</div>
-                                                <div className="text-gray-900 font-bold text-sm">Produit Frais</div>
-                                            </div>
-                                            <div className="p-4 rounded-2xl bg-orange-50/50 border border-orange-100/50">
-                                                <div className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-1">Livraison</div>
-                                                <div className="text-gray-900 font-bold text-sm">Disponible</div>
-                                            </div>
-                                        </div>
+                                    <div className="group bg-[#f8fafc] p-8 rounded-[2.5rem] mb-10 border border-[#e2e8f0]/40 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
+                                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/40 mb-4 flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                            Fiche Technique & Description
+                                        </h4>
+                                        <p className="text-gray-500 font-medium leading-relaxed text-base relative z-10">
+                                            {selectedProduct.description || "Ce produit d'exception a été sélectionné pour sa qualité exceptionnelle et sa fraîcheur garantie. Idéal pour une alimentation saine et équilibrée, il représente le meilleur de notre terroir."}
+                                        </p>
                                     </div>
 
-                                    <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+                                    <div className="flex flex-col sm:flex-row gap-4 mt-auto pt-10 border-t border-gray-100">
                                         <a 
                                             href={`https://wa.me/${data.settings.whatsapp}?text=Bonjour, je souhaite commander : ${selectedProduct.name}`}
                                             target="_blank"
-                                            className="flex-grow flex items-center justify-center gap-3 py-5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+                                            className="flex-grow flex items-center justify-center gap-4 py-5 px-6 bg-[#25D366] hover:bg-black text-white rounded-3xl font-black uppercase tracking-[0.2em] text-[12px] md:text-[13px] shadow-[0_20px_50px_rgba(37,211,102,0.3)] transition-all hover:scale-[1.03] active:scale-[0.97] group relative overflow-hidden text-center leading-tight"
                                         >
-                                            <WhatsApp size={20} /> Commander sur WhatsApp
+                                            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 skew-x-12" />
+                                            <WhatsApp size={24} className="group-hover:rotate-12 transition-transform shrink-0" />
+                                            <span>Commander via WhatsApp</span>
                                         </a>
                                         <a 
                                             href={`tel:${data.settings.call}`} 
-                                            className="px-8 flex items-center justify-center gap-3 py-5 bg-white border-2 border-neutral-100 text-gray-600 hover:border-emerald-200 rounded-2xl font-black uppercase tracking-widest text-xs transition-all"
+                                            className="px-8 flex items-center justify-center gap-4 py-5 bg-white border-2 border-[#0f172a]/5 text-[#0f172a] hover:bg-gray-50 rounded-3xl font-black uppercase tracking-[0.2em] text-[12px] md:text-[13px] transition-all hover:border-emerald-500 shadow-xl group text-center"
                                         >
-                                            <Phone size={20} /> Appeler
+                                            <Phone size={20} className="text-emerald-500 group-hover:scale-110 transition-transform shrink-0" />
+                                            <span>Appeler</span>
                                         </a>
                                     </div>
+                                    <p className="text-center mt-6 text-[9px] font-black text-gray-300 uppercase tracking-[0.3em]">
+                                        Livraison Express • 100% Naturel • Djapero Group
+                                    </p>
                                 </div>
+
                             </motion.div>
                         </div>
                     )}

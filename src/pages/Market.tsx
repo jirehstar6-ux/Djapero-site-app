@@ -124,17 +124,17 @@ const Market = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 md:gap-8 max-w-none">
                     <AnimatePresence>
                         {filteredItems.map((item, idx) => (
-                            <motion.div 
+                            <motion.div
                                 layout
                                 key={item.id}
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: idx * 0.02 }}
                                 onClick={() => setSelectedItem(item)}
-                                className="group relative bg-white rounded-[2.5rem] overflow-hidden shadow-xl shadow-emerald-900/5 border border-emerald-50/50 hover:shadow-2xl hover:shadow-emerald-900/10 transition-all cursor-pointer flex flex-col h-full"
+                                className="group relative bg-[#0f172a] rounded-[3.5rem] p-4 border border-white/5 hover:border-[#a3e635]/30 shadow-[0_40px_80px_rgba(0,0,0,0.4)] transition-all duration-500 cursor-pointer flex flex-col h-full"
                             >
                                 {(isAdmin || (user && user.uid === item.creatorId)) && (
                                     <button 
@@ -142,59 +142,42 @@ const Market = () => {
                                             e.stopPropagation();
                                             handleDeleteItem(item.id);
                                         }}
-                                        className="absolute top-6 left-6 z-10 bg-red-500/90 backdrop-blur-md text-white p-3 rounded-2xl shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
+                                        className="absolute top-6 left-6 z-20 bg-red-500/90 backdrop-blur-md text-white p-2.5 rounded-2xl shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
                                     >
-                                        <X size={20} />
+                                        <X size={18} />
                                     </button>
                                 )}
-                                <div className="relative h-72 sm:h-80 overflow-hidden bg-[#fbfbfb] p-8 flex items-center justify-center transition-colors group-hover:bg-emerald-50/40">
+
+                                <div className="relative aspect-[4/5] overflow-hidden rounded-[2.5rem] mb-6">
                                     <motion.img 
                                         src={item.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'} 
-                                        className="max-w-[85%] max-h-[85%] object-contain transition-all duration-1000 group-hover:scale-110 drop-shadow-[0_20px_50px_rgba(0,0,0,0.1)]" 
+                                        className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-110" 
                                         alt={item.name}
                                         onError={(e) => {
                                             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800';
                                         }}
                                     />
-                                    <div className="absolute top-6 right-6 bg-white/95 backdrop-blur-md px-4 py-2 rounded-2xl font-black text-emerald-600 text-[12px] shadow-xl border border-emerald-50 flex items-center">
-                                        {item.price} 
-                                        {!item.price.toString().toUpperCase().includes('FCFA') && (
-                                            <span className="text-[8px] opacity-40 uppercase tracking-widest ml-1">FCFA</span>
-                                        )}
+                                    <div className="absolute top-4 right-4 bg-[#a3e635] text-black px-4 py-1.5 rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg z-10">
+                                        NOUVEAU
                                     </div>
-                                    <div className="absolute inset-0 bg-emerald-900/0 group-hover:bg-emerald-900/5 transition-colors" />
-                                    <div className="absolute top-6 left-6 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="w-2 h-2 bg-emerald-400 rounded-full" />
-                                        <div className="w-2 h-2 bg-emerald-200 rounded-full" />
-                                    </div>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                 </div>
-                                <div className="p-8 flex flex-col flex-grow bg-white">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/60">
-                                            {MARKET_CATEGORIES.find(c => c.id === item.category)?.label || item.category}
+
+                                <div className="px-2 pb-4 flex flex-col flex-grow">
+                                    <div className="flex justify-between items-baseline mb-1">
+                                        <h3 className="text-xl md:text-2xl font-[1000] text-white uppercase tracking-tighter truncate max-w-[65%]">{item.name}</h3>
+                                        <span className="text-xl md:text-2xl font-[1000] text-[#a3e635] italic tracking-tighter flex items-baseline">
+                                            {item.price} 
+                                            <span className="text-[10px] opacity-40 uppercase tracking-widest ml-1 font-black underline-offset-2">FCFA</span>
                                         </span>
                                     </div>
-                                    <h3 className="text-xl md:text-2xl font-black text-[#0f172a] mb-3 leading-tight group-hover:text-emerald-600 transition-colors uppercase tracking-tighter line-clamp-2">{item.name}</h3>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#a3e635]/30 mb-8">
+                                        {MARKET_CATEGORIES.find(c => c.id === item.category)?.label || item.category}
+                                    </p>
                                     
-                                    {item.shopName && (
-                                        <div className="flex items-center gap-2 text-gray-400 mb-6 bg-neutral-50 px-3 py-1.5 rounded-xl self-start">
-                                            <StoreIcon size={12} className="text-emerald-500/40" />
-                                            <span className="text-[10px] font-black uppercase tracking-widest truncate">{item.shopName}</span>
-                                        </div>
-                                    )}
- 
-                                    <div className="mt-auto pt-6 border-t border-neutral-50 flex items-center justify-between">
-                                        <div className="flex items-center gap-3 text-gray-400">
-                                            <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center">
-                                                <MapPin size={14} className="text-orange-400" />
-                                            </div>
-                                            <span className="text-[11px] font-black uppercase tracking-tight truncate max-w-[120px] text-gray-500">{item.location}</span>
-                                        </div>
-                                        <button className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm hover:scale-110 active:scale-95">
-                                            <ShoppingCart size={20} />
-                                        </button>
-                                    </div>
+                                    <button className="w-full py-5 rounded-[1.8rem] bg-white text-black font-[1000] uppercase text-[10px] tracking-[0.2em] hover:bg-[#a3e635] transition-all shadow-xl group-hover:scale-[1.02] active:scale-95">
+                                        Détails du Produit
+                                    </button>
                                 </div>
                             </motion.div>
                         ))}
@@ -230,13 +213,13 @@ const Market = () => {
                                 <X size={24} />
                             </button>
 
-                            <div className="w-full md:w-1/2 bg-white relative overflow-hidden group p-10 flex items-center justify-center">
+                            <div className="w-full md:w-1/2 bg-white relative overflow-hidden group flex items-center justify-center">
                                 <img 
                                     src={selectedItem.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'} 
-                                    className="w-full h-full object-contain transition-transform duration-1000 group-hover:scale-105"
+                                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
                                     alt={selectedItem.name}
                                 />
-                                <div className="absolute top-8 left-8">
+                                <div className="absolute top-8 left-8 z-10">
                                     <span className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black text-xl shadow-2xl">
                                         {selectedItem.price} FCFA
                                     </span>
@@ -283,14 +266,22 @@ const Market = () => {
                                         href={`https://wa.me/${selectedItem.phone || '22800000000'}?text=${encodeURIComponent(`Bonjour Djapero ! Je souhaite commander le produit : ${selectedItem.name} (${selectedItem.price} FCFA)`)}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="w-full bg-[#25D366] text-white py-6 rounded-[2rem] font-black text-xl uppercase tracking-tighter flex items-center justify-center gap-4 shadow-2xl hover:bg-black transition-all active:scale-95 group"
+                                        className="w-full bg-[#25D366] text-white py-5 px-8 rounded-3xl font-black text-xl md:text-2xl uppercase tracking-tighter flex items-center justify-center gap-4 shadow-[0_20px_50px_rgba(37,211,102,0.3)] hover:bg-black transition-all active:scale-95 group relative overflow-hidden text-center leading-tight"
                                     >
-                                        <Phone size={24} className="group-hover:rotate-12 transition-transform" />
-                                        Commander par WhatsApp
+                                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12" />
+                                        <Phone size={24} className="group-hover:rotate-12 transition-transform shrink-0" />
+                                        <span>Commander Maintenant</span>
                                     </a>
-                                    <p className="text-center text-gray-300 font-bold text-[8px] uppercase tracking-[0.2em] px-4 leading-relaxed">
-                                        Transaction sécurisée via le réseau de livreurs de Djapero Group
-                                    </p>
+                                    <div className="flex justify-center gap-6">
+                                         <div className="flex items-center gap-2">
+                                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                             <span className="text-[10px] font-black text-[#0f172a] uppercase tracking-widest">Paiement Mobile</span>
+                                         </div>
+                                         <div className="flex items-center gap-2">
+                                             <div className="w-2 h-2 bg-orange-500 rounded-full" />
+                                             <span className="text-[10px] font-black text-[#0f172a] uppercase tracking-widest">Livraison Rapide</span>
+                                         </div>
+                                    </div>
                                 </div>
                             </div>
                         </motion.div>

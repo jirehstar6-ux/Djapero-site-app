@@ -53,6 +53,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Ads
+    match /ads/{adId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Hero Banners
+    match /heroBanners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // User Profiles
     match /users/{userId} {
       function isValidProfile(data) {

@@ -132,6 +132,35 @@
         "completedAt": { "type": "number" }
       },
       "required": ["uid", "email", "fullName", "occupation", "phone", "city", "role", "completedAt"]
+    },
+    "Ad": {
+      "title": "Advertisement",
+      "description": "Publicity banner or ad",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "link": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "subtitle", "imageUrl", "active", "createdAt"]
+    },
+    "HeroBanner": {
+      "title": "Hero Banner",
+      "description": "Main banner at the top of the dashboard",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "heading": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "subtitle", "heading", "imageUrl", "active", "createdAt"]
     }
   },
   "firestore": {
@@ -162,6 +191,14 @@
     "/notifications/{notifId}": {
       "schema": "Notification",
       "description": "System notifications"
+    },
+    "/ads/{adId}": {
+      "schema": "Ad",
+      "description": "Publicity ads"
+    },
+    "/heroBanners/{bannerId}": {
+      "schema": "HeroBanner",
+      "description": "Top dashboard hero banners"
     },
     "/settings/main": {
       "schema": "Settings",

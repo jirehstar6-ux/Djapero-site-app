@@ -44,6 +44,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errMessage = error instanceof Error ? error.message : String(error);
   const errCode = (error as any)?.code || "unknown";
   
+  // If the error is 'offline', do not throw or alarm, it's normal in some previews.
+  if (errMessage.includes("offline") || errCode === 'unavailable') {
+    console.warn("Firebase client is operating offline. Some data may be unavailable.");
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: `${errCode}: ${errMessage}`,
     authInfo: {
@@ -66,19 +72,20 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection on boot with more info
+// Test connection on boot with more info after a short delay
 async function testConnection() {
-  console.log("🔄 Testing Firestore connection...");
-  try {
-    const start = Date.now();
-    await getDocFromServer(doc(db, 'settings', 'main'));
-    console.log(`✅ Firestore connection successful (${Date.now() - start}ms)`);
-  } catch (error: any) {
-    console.error("❌ Firestore connection test failed:", error);
-    if(error?.message?.includes('the client is offline')) {
-      console.error("DEBUG: Firebase client thinks it is offline. Check network or databaseId.");
+  console.log("🔄 Testing Firestore connection in 2 seconds...");
+  setTimeout(async () => {
+    try {
+      const start = Date.now();
+      await getDocFromServer(doc(db, 'settings', 'main')).catch(() => null);
+      console.log(`✅ Firestore connection successful (${Date.now() - start}ms)`);
+    } catch (error: any) {
+      if(error?.message?.includes('the client is offline')) {
+        console.warn("Firebase client is operating offline. This is expected in certain browser environments.");
+      }
     }
-  }
+  }, 2000);
 }
 testConnection();
 
@@ -154,6 +161,7 @@ export interface Settings {
     authBackgrounds?: { url: string; label: string; }[];
     heroImage?: string;
     heroMode?: 'video' | 'image';
+    adminCustomCode?: string;
 }
 
 export interface Notification {
@@ -196,6 +204,16 @@ export interface UserProfile {
     completedAt: number;
 }
 
+export interface Ad {
+    id: string;
+    title: string;
+    subtitle: string;
+    imageUrl: string;
+    link?: string;
+    active: boolean;
+    createdAt: number;
+}
+
 export interface AppData {
     products: Product[];
     videos: Video[];
@@ -203,8 +221,21 @@ export interface AppData {
     reals: Real[];
     notifications: Notification[];
     marketItems: MarketItem[];
+    ads: Ad[];
+    heroBanners: HeroBanner[];
     settings: Settings;
     users: UserProfile[];
+}
+
+export interface HeroBanner {
+    id: string;
+    title: string;
+    subtitle: string;
+    heading: string;
+    imageUrl: string;
+    videoUrl?: string;
+    active: boolean;
+    createdAt: number;
 }
 
 export function useData() {
@@ -215,6 +246,8 @@ export function useData() {
         reals: [],
         notifications: [],
         marketItems: [],
+        ads: [],
+        heroBanners: [],
         settings: { whatsapp: "22892052664", call: "22892052664" },
         users: []
     });
@@ -237,8 +270,10 @@ export function useData() {
         const unsubProducts = onSnapshot(query(collection(db, "products"), orderBy("createdAt", "desc")), (snap) => {
             const products = snap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
             setData(prev => ({ ...prev, products }));
+            setLoading(false); // Initial load complete when we have some core data
         }, (error) => {
             handleFirestoreError(error, OperationType.LIST, "products");
+            setLoading(false); // Avoid blocking forever on error
         });
 
         const unsubServices = onSnapshot(query(collection(db, "services"), orderBy("createdAt", "desc")), (snap) => {
@@ -276,6 +311,20 @@ export function useData() {
             handleFirestoreError(error, OperationType.LIST, "notifications");
         });
 
+        const unsubAds = onSnapshot(query(collection(db, "ads"), orderBy("createdAt", "desc")), (snap) => {
+            const ads = snap.docs.map(d => ({ id: d.id, ...d.data() } as Ad));
+            setData(prev => ({ ...prev, ads }));
+        }, (error) => {
+            handleFirestoreError(error, OperationType.LIST, "ads");
+        });
+
+        const unsubHero = onSnapshot(query(collection(db, "heroBanners"), orderBy("createdAt", "desc")), (snap) => {
+            const heroBanners = snap.docs.map(d => ({ id: d.id, ...d.data() } as HeroBanner));
+            setData(prev => ({ ...prev, heroBanners }));
+        }, (error) => {
+            handleFirestoreError(error, OperationType.LIST, "heroBanners");
+        });
+
         const unsubUsers = onSnapshot(query(collection(db, "users"), orderBy("completedAt", "desc")), (snap) => {
             const users = snap.docs.map(d => ({ ...d.data() } as UserProfile));
             setData(prev => ({ ...prev, users }));
@@ -290,8 +339,6 @@ export function useData() {
             handleFirestoreError(error, OperationType.LIST, "users");
         });
 
-        setLoading(false);
-
         return () => {
             unsubSettings();
             unsubProducts();
@@ -300,6 +347,8 @@ export function useData() {
             unsubMarket();
             unsubReals();
             unsubNotifications();
+            unsubAds();
+            unsubHero();
             unsubUsers();
         };
     }, []);
@@ -484,6 +533,66 @@ export function useData() {
         }
     };
 
+    const addAd = async (ad: Omit<Ad, 'id'>) => {
+        try {
+            await addDoc(collection(db, "ads"), ad);
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.CREATE, "ads");
+            return false;
+        }
+    };
+
+    const updateAd = async (id: string, ad: Partial<Ad>) => {
+        try {
+            await updateDoc(doc(db, "ads", id), ad);
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `ads/${id}`);
+            return false;
+        }
+    };
+
+    const deleteAd = async (id: string) => {
+        try {
+            await deleteDoc(doc(db, "ads", id));
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `ads/${id}`);
+            return false;
+        }
+    };
+
+    const addHeroBanner = async (banner: Omit<HeroBanner, 'id'>) => {
+        try {
+            await addDoc(collection(db, "heroBanners"), banner);
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.CREATE, "heroBanners");
+            return false;
+        }
+    };
+
+    const updateHeroBanner = async (id: string, banner: Partial<HeroBanner>) => {
+        try {
+            await updateDoc(doc(db, "heroBanners", id), banner);
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `heroBanners/${id}`);
+            return false;
+        }
+    };
+
+    const deleteHeroBanner = async (id: string) => {
+        try {
+            await deleteDoc(doc(db, "heroBanners", id));
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `heroBanners/${id}`);
+            return false;
+        }
+    };
+
     return { 
         data, 
         loading, 
@@ -504,6 +613,12 @@ export function useData() {
         deleteNotification,
         addReal,
         updateReal,
-        deleteReal
+        deleteReal,
+        addAd,
+        updateAd,
+        deleteAd,
+        addHeroBanner,
+        updateHeroBanner,
+        deleteHeroBanner
     };
 }

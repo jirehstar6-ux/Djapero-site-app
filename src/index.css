@@ -5,7 +5,21 @@
 @import "./css/admin.css";
 
 @theme {
+  --font-display: "Outfit", sans-serif;
+  --font-sans: "Poppins", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-primary: #a3e635;
+}
+
+@keyframes mesh {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(5%, 5%) scale(1.1); }
+  66% { transform: translate(-5%, 8%) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.animate-mesh {
+  animation: mesh 20s ease-in-out infinite alternate;
 }
 
 @keyframes slow-zoom {
@@ -25,4 +39,17 @@
 
 .animate-scanline {
   animation: scanline 6s linear infinite;
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .landing-input {
+    @apply w-full bg-black/5 border border-black/10 px-8 py-5 rounded-2xl text-black outline-none focus:border-[#a3e635] transition-all font-bold placeholder:text-black/20;
+  }
 }
