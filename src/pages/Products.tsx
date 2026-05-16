@@ -1,12 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, ShoppingBag, Phone as WhatsApp, Phone, X, ArrowLeft, Heart, Share2 } from "lucide-react";
 import { useData } from "../hooks/useData";
 import { motion, AnimatePresence } from "motion/react";
+import { useLocation } from "react-router-dom";
 
 export default function Products() {
     const { data, loading } = useData();
+    const location = useLocation();
     const [search, setSearch] = useState("");
     const [selectedProduct, setSelectedProduct] = useState<any>(null);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const query = params.get('q');
+        if (query) {
+            setSearch(query);
+        }
+    }, [location.search]);
 
     const [displayCount, setDisplayCount] = useState(12);
 

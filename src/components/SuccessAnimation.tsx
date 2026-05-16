@@ -13,6 +13,18 @@ export default function SuccessAnimation({ isAdmin }: SuccessAnimationProps) {
     const { data } = useData();
     const [selectedCard, setSelectedCard] = useState<any>(null);
 
+    const getYoutubeId = (url: string) => {
+        if (!url) return '';
+        if (!url.includes('youtube.com') && !url.includes('youtu.be')) return url;
+        let videoId = '';
+        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i;
+        const match = url.match(regex);
+        if (match && match[1]) {
+            videoId = match[1];
+        }
+        return videoId || url;
+    };
+
     const settings = data?.settings;
 
     const [showVideo, setShowVideo] = useState(false);
@@ -87,22 +99,22 @@ export default function SuccessAnimation({ isAdmin }: SuccessAnimationProps) {
                 </p>
             </motion.div>
 
-            <div className="relative w-full max-w-5xl h-[380px] flex justify-center mb-24">
+            <div className="relative w-full max-w-7xl flex justify-center mb-16 md:mb-24 px-4 md:px-12 mt-12 md:mt-24">
                 {/* The curved string */}
-                <svg className="absolute top-0 left-0 w-full h-[80px] overflow-visible pointer-events-none opacity-50" preserveAspectRatio="none" viewBox="0 0 1000 100">
+                <svg className="absolute top-0 left-0 w-full h-[80px] overflow-visible pointer-events-none opacity-60" preserveAspectRatio="none" viewBox="0 0 1000 100">
                     <motion.path 
                         d="M 0 0 Q 500 100 1000 0" 
                         fill="transparent" 
-                        stroke="#e2e8f0" 
-                        strokeWidth="2"
+                        stroke="#1e293b" 
+                        strokeWidth="1.5"
                         initial={{ pathLength: 0 }}
                         animate={{ pathLength: 1 }}
                         transition={{ duration: 1.5, ease: "easeInOut" }}
-                    />
+                    />                
                 </svg>
 
                 {/* Cards */}
-                <div className="absolute top-0 left-0 w-full flex justify-between px-4 md:px-12">
+                <div className="relative w-full flex justify-between z-20" style={{ perspective: '1200px' }}>
                     {cards.map((card, index) => (
                         <motion.div
                             key={card.title}
@@ -115,37 +127,38 @@ export default function SuccessAnimation({ isAdmin }: SuccessAnimationProps) {
                                 damping: 12, 
                                 delay: 0.6 + index * 0.2 
                             }}
-                            style={{ width: '16%' }}
+                            style={{ width: '19.5%' }}
                         >
                             {/* Pin */}
-                            <div className="absolute -top-3 z-20 w-4 h-6 bg-[#22c55e] rounded-sm transform origin-top shadow-sm flex items-start justify-center pt-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                            <div className="absolute -top-3 z-20 w-5 h-8 bg-[#22c55e] rounded-sm transform origin-top shadow-sm flex items-start justify-center pt-1.5">
+                                <div className="w-2 h-2 rounded-full bg-white/80" />
                             </div>
 
                             {/* Card Body */}
                             <motion.div 
                                 onClick={() => setSelectedCard(card)}
-                                whileHover={{ scale: 1.05, y: -10, rotate: 0 }}
-                                className="bg-white p-2 md:p-3 pb-8 md:pb-12 rounded-[20px] shadow-2xl border border-slate-50 w-full aspect-[4/5] flex flex-col cursor-pointer transition-all active:scale-95 group"
+                                whileHover={{ scale: 1.1, y: -15, rotate: 0 }}
+                                className="bg-white p-2.5 md:p-3.5 rounded-[36px] shadow-2xl border border-white/50 w-full aspect-[4/5] flex flex-col cursor-pointer transition-all active:scale-95 group relative overflow-hidden"
                             >
-                                <div className={`w-full flex-grow rounded-xl bg-gradient-to-br ${!card.image ? card.color : 'bg-slate-50'} flex items-center justify-center shadow-inner overflow-hidden relative`}>
+                                <div className={`w-full h-full rounded-[28px] bg-gradient-to-br ${!card.image ? card.color : 'bg-slate-50'} flex items-center justify-center shadow-inner overflow-hidden relative`}>
                                     <AnimatePresence mode="wait">
                                         {card.image ? (
                                             <motion.img 
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
+                                                initial={{ opacity: 0, scale: 1 }}
+                                                animate={{ opacity: 1, scale: 1 }}
                                                 src={card.image} 
                                                 alt={card.title} 
-                                                className="w-full h-full object-cover" 
+                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                                                referrerPolicy="no-referrer"
                                             />
                                         ) : (
                                             <card.icon className="text-white w-8 h-8 md:w-16 md:h-16 drop-shadow-lg relative z-10" />
                                         )}
                                     </AnimatePresence>
+                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-8 pb-10">
+                                        <span className="text-[10px] md:text-xs font-black text-white uppercase tracking-tighter block text-center drop-shadow-sm">{card.title}</span>
+                                    </div>
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                                </div>
-                                <div className="absolute bottom-2 md:bottom-5 left-0 w-full text-center">
-                                    <span className="text-[10px] md:text-sm font-black text-slate-800 uppercase tracking-tighter">{card.title}</span>
                                 </div>
                             </motion.div>
                         </motion.div>
@@ -217,7 +230,7 @@ export default function SuccessAnimation({ isAdmin }: SuccessAnimationProps) {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 3.2, duration: 0.8 }}
-                className="z-10 mt-12 mb-12 flex flex-col items-center gap-10 w-full"
+                className="z-10 mt-12 md:mt-16 mb-12 flex flex-col items-center gap-12 lg:gap-16 w-full"
             >
                 <button 
                     onClick={() => navigate("/accueil")}
@@ -284,7 +297,7 @@ export default function SuccessAnimation({ isAdmin }: SuccessAnimationProps) {
                         <div className="w-full h-full max-w-6xl aspect-video relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-slate-900">
                             {introVideo.srcType === 'youtube' ? (
                                 <iframe 
-                                    src={`https://www.youtube.com/embed/${introVideo.src}?autoplay=1`} 
+                                    src={`https://www.youtube.com/embed/${getYoutubeId(introVideo.src)}?autoplay=1`} 
                                     className="w-full h-full"
                                     allow="autoplay; encrypted-media"
                                     allowFullScreen

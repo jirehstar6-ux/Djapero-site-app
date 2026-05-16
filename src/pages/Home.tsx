@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useData } from "../hooks/useData";
 import { motion } from "motion/react";
 import { useAuth } from "../context/AuthContext";
@@ -21,6 +22,9 @@ export default function Home() {
     const { data, loading } = useData();
     const { user, profile, isAdmin } = useAuth();
     const navigate = useNavigate();
+
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     if (loading || !data) return (
         <div className="min-h-screen flex items-center justify-center bg-[#f7f8fa]">
@@ -83,13 +87,39 @@ export default function Home() {
             {/* Top Bar Navigation */}
             <div className="w-full h-16 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-6 md:px-10 fixed top-0 z-40">
                 <div className="flex items-center gap-2">
-                    <img src="/logo.png" className="h-8 w-auto" alt="Djapero Logo" />
+                    {data.settings?.logoUrl ? (
+                         <img src={data.settings.logoUrl} className="h-8 w-auto object-contain" alt="Djapero Logo" />
+                    ) : (
+                        <div className="w-10 h-10 bg-[#a3e635] rounded-xl flex items-center justify-center text-[#0f172a] shadow-lg shadow-[#a3e635]/20">
+                            <ShoppingBag size={20} strokeWidth={2.5} />
+                        </div>
+                    )}
                     <span className="font-black uppercase tracking-tighter text-slate-900 hidden sm:block">Djapero Dashboard</span>
                 </div>
+
                 <div className="flex items-center gap-4">
-                    <button className="p-2 text-slate-400 hover:text-slate-900 transition-colors">
-                        <Search size={20} />
-                    </button>
+                    <div className={`relative flex items-center transition-all duration-300 ${isSearchOpen ? 'w-48 md:w-64' : 'w-10'}`}>
+                        <button 
+                            onClick={() => {
+                                if (isSearchOpen && searchQuery) {
+                                    navigate(`/produits?q=${encodeURIComponent(searchQuery)}`);
+                                } else {
+                                    setIsSearchOpen(!isSearchOpen);
+                                }
+                            }}
+                            className={`p-2 transition-colors relative z-10 ${isSearchOpen ? 'text-[#a3e635]' : 'text-slate-400 hover:text-slate-900'}`}
+                        >
+                            <Search size={20} />
+                        </button>
+                        <input 
+                            type="text"
+                            placeholder="Rechercher..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && navigate(`/produits?q=${encodeURIComponent(searchQuery)}`)}
+                            className={`absolute right-0 bg-slate-50 border border-slate-100 rounded-full py-2 pl-4 pr-10 outline-none text-xs font-bold transition-all duration-300 ${isSearchOpen ? 'opacity-100' : 'opacity-0 scale-90 pointer-events-none'}`}
+                        />
+                    </div>
                     <button className="p-2 text-slate-400 hover:text-slate-900 transition-colors relative">
                         <Bell size={20} />
                         <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
@@ -112,8 +142,12 @@ export default function Home() {
                         className="max-w-2xl"
                     >
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-xl shadow-slate-200">
-                                <img src="/logo.png" alt="Djapero" className="w-full h-auto" />
+                            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-xl shadow-slate-200 overflow-hidden">
+                                {data.settings?.logoUrl ? (
+                                    <img src={data.settings.logoUrl} alt="Djapero" className="w-full h-auto object-contain" />
+                                ) : (
+                                    <ShoppingBag className="text-[#a3e635]" size={24} />
+                                )}
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-[#a3e635] text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1">Espace Membre</span>
@@ -185,7 +219,11 @@ export default function Home() {
                         {/* Background Visual Elements */}
                         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-[#a3e635]/10 to-transparent pointer-events-none" />
                         <div className="absolute bottom-0 right-0 p-8 opacity-20 group-hover:scale-110 transition-transform duration-1000">
-                             <img src="/logo.png" className="w-48 grayscale invert" alt="" />
+                             {data.settings?.logoUrl ? (
+                                 <img src={data.settings.logoUrl} className="w-48 grayscale invert brightness-0" alt="" />
+                             ) : (
+                                 <ShoppingBag size={80} className="text-white opacity-20" />
+                             )}
                         </div>
                     </motion.div>
 

@@ -10,6 +10,7 @@ import {
     User as FirebaseUser,
     setPersistence,
     browserLocalPersistence,
+    browserSessionPersistence,
     inMemoryPersistence,
     browserPopupRedirectResolver
 } from "firebase/auth";
@@ -111,33 +112,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        let isFirstAuthCheck = true;
-        
-        const initAuth = async () => {
+        let unsubscribe: () => void;
+
+        (async () => {
+            // 1. Setup persistence
             try {
-                // Wait for the SDK to settle
-                await new Promise(r => setTimeout(r, 1000));
-                
-                // Consume any pending redirect result that might cause assertion errors
-                await getRedirectResult(auth).catch((err) => {
-                    console.warn("Cleaned pending redirect:", err.code);
-                });
-
                 // Set persistence explicitly to local for better cross-tab behavior
-                await setPersistence(auth, browserLocalPersistence).catch((err) => {
-                    console.warn("browserLocalPersistence blocked by iframe, falling back to inMemory:", err);
-                    return setPersistence(auth, inMemoryPersistence);
+                await setPersistence(auth, browserLocalPersistence).catch(async (err) => {
+                    console.warn("browserLocalPersistence blocked by iframe, trying session persistence:", err);
+                    return await setPersistence(auth, browserSessionPersistence).catch((err2) => {
+                        console.warn("browserSessionPersistence also blocked, falling back to inMemory:", err2);
+                        return setPersistence(auth, inMemoryPersistence);
+                    });
                 });
-
             } catch (err) {
-                console.error("Auth init error:", err);
+                console.error("Auth persistence setup error:", err);
             }
-        };
-        initAuth();
 
-        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-            console.log("Auth State Changed: ", firebaseUser ? `User: ${firebaseUser.uid} (${firebaseUser.email})` : "No user authenticated");
-            const handleAuthState = async () => {
+            // 2. Setup listener
+            unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+                console.log("Auth State Changed: ", firebaseUser ? `User: ${firebaseUser.uid} (${firebaseUser.email})` : "No user authenticated");
                 try {
                     if (firebaseUser) {
                         setUser({
@@ -156,7 +150,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 setProfile(null);
                             }
                         } catch (err: any) {
-                            // If we fail to get profile because we are offline, don't crash the app
                             if (err.message?.includes("offline") || err.message?.includes("client is offline")) {
                                 console.warn("Firestore is offline, continuing with limited profile: ", err.message);
                                 setProfile(null);
@@ -171,31 +164,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 } catch (err) {
                     console.error("Auth state change error:", err);
                 } finally {
-                    if (isFirstAuthCheck) {
-                        console.log("Auth state change first check - loading set to false");
-                        setLoading(false);
-                        isFirstAuthCheck = false;
-                    }
+                    setLoading(false);
                 }
-            };
-
-            handleAuthState();
-        }, (error) => {
-            console.error("onAuthStateChanged error:", error);
-            setLoading(false);
-        });
+            }, (error) => {
+                console.error("onAuthStateChanged error:", error);
+                setLoading(false);
+            });
+        })();
 
         // Fallback for environments where auth state takes too long to initialize
         const timeout = setTimeout(() => {
-            if (isFirstAuthCheck) {
-                console.log("Auth loading fallback triggered");
-                setLoading(false);
-                isFirstAuthCheck = false;
-            }
+            setLoading(false);
         }, 5000);
 
         return () => {
-            unsubscribe();
+            if (unsubscribe) unsubscribe();
             clearTimeout(timeout);
         };
     }, []);
@@ -256,17 +239,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const loginWithEmail = async (email: string, pass: string) => {
         if (isActionInProgress) return;
         setIsActionInProgress(true);
+        console.log("Attempting email login for:", email);
         try {
-            const result = await signInWithEmailAndPassword(auth, email, pass);
-
-            if (result?.user) {
-                setUser({
-                    uid: result.user.uid,
-                    email: result.user.email,
-                    displayName: result.user.displayName,
-                    photoURL: result.user.photoURL
-                });
-            }
+            await signInWithEmailAndPassword(auth, email, pass);
+            console.log("Email login successful");
         } catch (error: any) {
             console.error("Email Login Error:", error.code || error.message);
             if (error.message === "AUTH_TIMEOUT") {
@@ -281,17 +257,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signupWithEmail = async (email: string, pass: string) => {
         if (isActionInProgress) return;
         setIsActionInProgress(true);
+        console.log("Attempting email signup for:", email);
         try {
-            const result = await createUserWithEmailAndPassword(auth, email, pass);
-
-            if (result?.user) {
-                setUser({
-                    uid: result.user.uid,
-                    email: result.user.email,
-                    displayName: result.user.displayName,
-                    photoURL: result.user.photoURL
-                });
-            }
+            await createUserWithEmailAndPassword(auth, email, pass);
+            console.log("Email signup successful");
         } catch (error: any) {
             console.error("Email Signup Error:", error.code || error.message);
             if (error.message === "AUTH_TIMEOUT") {

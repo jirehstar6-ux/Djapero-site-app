@@ -194,12 +194,10 @@ export default function Auth() {
 
     // Redirect if already has profile OR is admin
     useEffect(() => {
-        if (user && profile && !isAdmin) {
+        if (user && profile) {
             navigate("/accueil");
-        } else if (user && isAdmin) {
-            navigate("/admin");
         }
-    }, [user, profile, navigate, isAdmin]);
+    }, [user, profile, navigate]);
 
     const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -231,7 +229,7 @@ export default function Auth() {
             navigate("/bienvenue");
         } catch (error: any) {
             if (error.code === 'auth/popup-closed-by-user') {
-                console.log("User closed login popup");
+                setLoginError("Connexion annulée. Veuillez réessayer si vous le souhaitez.");
             } else if (error.code === 'auth/popup-blocked') {
                 setLoginError("Le navigateur a bloqué la fenêtre de connexion. Veuillez autoriser les popups pour ce site.");
             } else if (error.code === 'auth/network-request-failed') {
@@ -324,272 +322,364 @@ export default function Auth() {
     const isStepOnboarding = user && !profile && !isAdmin;
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center p-4 md:p-8 overflow-hidden relative font-sans bg-[#f7f8fa]">
-            {/* Centered White Card Container matching the screenshot */}
-            <div className="relative z-10 w-full max-w-[1000px] flex flex-col md:flex-row bg-white rounded-[24px] md:h-[600px] shadow-[0_4px_40px_rgb(0,0,0,0.06)] p-2">
-                
-                {/* Left Side: Media Container */}
-                <div className="w-full md:w-[45%] p-6 md:p-8 bg-blue-700/90 rounded-[20px] flex flex-col justify-between h-[300px] md:h-full relative overflow-hidden text-white shadow-inner">
-                    {/* Background Video/Image (Djapero things) */}
-                    <div className="absolute inset-0">
-                        <HeroVideoPlayer heroVid={heroVid} isPlaying={isPlaying} isMuted={isMuted} />
-                        {/* A strong blue/black multiplying overlay to give it a similar vibe to the blue abstract while showing the DJAPERO video */}
-                        <div className="absolute inset-0 bg-blue-900/60 mix-blend-multiply pointer-events-none" />
-                        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/40 via-transparent to-[#1e1b4b]/80 pointer-events-none" />
-                    </div>
-                    
-                    {/* Top: Branding / Small subtitle */}
-                    <div className="relative z-20">
-                        <p className="text-white/70 text-[11px] font-medium tracking-wide mb-3">You can easily</p>
-                        <h2 className="text-white text-[32px] md:text-[36px] font-bold leading-[1.1] tracking-tight mb-4 drop-shadow-sm">
-                            <span className="block">Culture</span>
-                            <span className="block">Connectée</span>
-                            <span className="block text-white/90">avec Djapero</span>
-                        </h2>
-                    </div>
-
-                    {/* Bottom: DJAPERO Content & Links */}
-                    <div className="relative z-20 mt-auto">
-                        <div className="flex items-center gap-2 mb-6">
-                            <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur flex items-center justify-center border border-white/30 text-[#a3e635]">
-                                <Leaf size={12} className="text-[#a3e635]" />
-                            </div>
-                            <span className="font-semibold text-sm tracking-wide">Djapero<span className="font-bold text-[#a3e635]">Group</span></span>
-                        </div>
-                        
-                        <div className="flex flex-col gap-2">
-                            <p className="text-white/60 text-[10px] font-semibold">Our expertise</p>
-                            <div className="flex items-center gap-4 text-white/80">
-                                <span className="flex items-center gap-1.5 text-[11px]"><CloudUpload size={12}/> Volailler</span>
-                                <span className="flex items-center gap-1.5 text-[11px]"><Award size={12}/> Maraîcher</span>
-                                <span className="flex items-center gap-1.5 text-[11px]"><Camera size={12}/> Pisciculture</span>
-                            </div>
-                        </div>
-                    </div>
+        <div className="min-h-screen w-full flex flex-col md:flex-row overflow-hidden relative font-sans bg-white">
+            
+            {/* Background Image Section - Immersive Left Side */}
+            <div className="relative w-full md:w-[55%] h-[40vh] md:h-screen overflow-hidden bg-[#101928]">
+                <div className="absolute inset-0 z-0">
+                    <img 
+                        src="https://images.unsplash.com/photo-1592982537447-6f2a6a0c3c97?auto=format&fit=crop&q=80&w=1800"
+                        className="w-full h-full object-cover animate-slow-zoom"
+                        alt="Agriculture Connectée Djapero"
+                        referrerPolicy="no-referrer"
+                    />
+                    {/* Immersive Dark Overlay matching Djapero brand - adjusted for better visibility */}
+                    <div className="absolute inset-0 bg-[#070b14]/20 mix-blend-multiply pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#070b14]/80 via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#070b14]/40 via-transparent to-transparent pointer-events-none" />
                 </div>
 
-                {/* Right Side: Form Container */}
-                <div className="w-full md:w-[55%] bg-white p-6 md:p-10 flex flex-col justify-center h-full overflow-y-auto custom-scrollbar relative z-20">
-                    <AnimatePresence mode="wait">
-                        {!isStepOnboarding ? (
-                            <motion.div 
-                                key="login"
-                                initial={{ opacity: 0, x: 10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -10 }}
-                                className="w-full max-w-[380px] mx-auto pl-0 md:pl-4"
-                            >
-                                <div className="mb-8">
-                                    <h2 className="text-[26px] font-bold text-slate-800 tracking-tight mb-1">
-                                        {authMode === 'login' ? 'Get Started Now' : 'Create Account'}
-                                    </h2>
-                                    <p className="text-slate-400 text-[11px] font-medium">
-                                        {authMode === 'login' ? 'Please login to your account to continue' : 'Sign up to get started'}
-                                    </p>
-                                </div>
+                {/* Left Side Content */}
+                <div className="relative z-10 h-full flex flex-col justify-between p-8 md:p-16 text-white">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                    >
+                        <div className="flex items-center gap-3 mb-10">
+                            <div className="w-12 h-12 bg-[#a3e635] rounded-2xl flex items-center justify-center text-[#0f172a] shadow-xl shadow-[#a3e635]/20">
+                                <Leaf size={24} strokeWidth={2.5} />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="font-black text-xl tracking-tighter uppercase leading-none">Djapero</span>
+                                <span className="text-[10px] font-bold text-[#a3e635] tracking-[0.2em] uppercase leading-none mt-1">Dashboard v3</span>
+                            </div>
+                        </div>
 
-                                <form onSubmit={handleEmailAuth} className="space-y-4">
-                                    {authMode === 'signup' && (
-                                        <div className="space-y-1">
-                                            <label className="text-[11px] font-bold text-slate-700">Name</label>
+                        <h2 className="text-4xl md:text-6xl font-black leading-[0.95] tracking-tighter mb-6 max-w-sm">
+                            CULTURE <br />
+                            <span className="text-[#a3e635]">CONNECTÉE</span> <br />
+                            PAR DJAPERO
+                        </h2>
+                        
+                        <p className="text-slate-300 text-sm md:text-base font-medium max-w-xs leading-relaxed">
+                            Simplifiez la gestion de votre exploitation avec nos solutions digitales innovantes.
+                        </p>
+                    </motion.div>
+
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.6 }}
+                        className="flex flex-col gap-6"
+                    >
+                        <div className="flex items-center gap-10">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-[#a3e635] uppercase tracking-[0.3em] mb-1">Plus de</span>
+                                <span className="text-4xl font-black text-white leading-none">500</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Partenaires</span>
+                            </div>
+                            <div className="w-px h-12 bg-white/10" />
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-[#a3e635] uppercase tracking-[0.3em] mb-1">Plus de</span>
+                                <span className="text-4xl font-black text-white leading-none">12k</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Commandes</span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center gap-2">
+                                <CloudUpload size={12} className="text-[#a3e635]" />
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-200">Production</span>
+                            </div>
+                            <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center gap-2">
+                                <Award size={12} className="text-[#a3e635]" />
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-200">Qualité</span>
+                            </div>
+                            <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md flex items-center gap-2">
+                                <Zap size={12} className="text-[#a3e635]" />
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-200">Vitesse</span>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
+
+            {/* Right Side: Form Container */}
+            <div className="w-full md:w-[45%] bg-white h-full overflow-y-auto px-8 py-12 md:px-20 flex flex-col justify-center relative">
+                
+                {/* Mobile floating logo */}
+                <div className="md:hidden flex items-center gap-2 absolute top-8 left-8">
+                     <div className="w-8 h-8 bg-[#a3e635] rounded-xl flex items-center justify-center text-[#0f172a]">
+                        <Leaf size={16} />
+                    </div>
+                    <span className="font-black text-slate-900 uppercase text-xs tracking-tighter">Djapero</span>
+                </div>
+
+                <AnimatePresence mode="wait">
+                    {!isStepOnboarding ? (
+                        <motion.div 
+                            key="login"
+                            initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: -10 }}
+                            className="w-full max-w-[420px] mx-auto"
+                        >
+                            <div className="mb-14 text-center">
+                                <motion.h2 
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: 0.2 }}
+                                    className="text-5xl md:text-6xl font-black text-slate-900 tracking-[0.02em] mb-4 uppercase leading-none"
+                                >
+                                    {authMode === 'login' ? 'Bienvenue' : 'Inscription'}
+                                </motion.h2>
+                                <motion.p 
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: 0.3 }}
+                                    className="text-slate-400 text-sm md:text-[15px] font-medium tracking-tight max-w-[340px] mx-auto leading-relaxed"
+                                >
+                                    {authMode === 'login' ? 'Veuillez vous connecter pour accéder à votre tableau de bord.' : 'Rejoignez l\'aventure Djapero dès aujourd\'hui.'}
+                                </motion.p>
+                            </div>
+
+                            <form onSubmit={handleEmailAuth} className="space-y-8">
+                                {authMode === 'signup' && (
+                                    <div className="space-y-3">
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Nom complet</label>
+                                        <div className="relative group">
+                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                                <User size={22} />
+                                            </div>
                                             <input 
-                                                className="w-full border border-slate-200 px-3 py-2.5 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium placeholder:text-slate-400 placeholder:font-normal"
+                                                className="w-full bg-slate-50/50 border border-slate-100 px-16 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-sm font-bold placeholder:text-slate-200 shadow-sm hover:shadow-md"
                                                 type="text"
-                                                placeholder="Enter your name..."
+                                                placeholder="VOTRE NOM COMPLET"
                                             />
                                         </div>
-                                    )}
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-slate-700">Email address</label>
+                                    </div>
+                                )}
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Adresse Email</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                            <Mail size={22} />
+                                        </div>
                                         <input 
-                                            className="w-full border border-slate-200 px-3 py-2.5 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium placeholder:text-slate-400 placeholder:font-normal"
+                                            className="w-full bg-slate-50/50 border border-slate-100 px-16 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-sm font-bold placeholder:text-slate-200 shadow-sm hover:shadow-md"
                                             type="email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="you@email.com"
+                                            placeholder="NOM@EXEMPLE.COM"
                                             required
                                         />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-slate-700">Password</label>
-                                        <div className="relative">
-                                            <input 
-                                                className="w-full border border-slate-200 px-3 py-2.5 pr-20 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium placeholder:text-slate-400 placeholder:font-normal"
-                                                type="password"
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                placeholder="••••••••"
-                                                required
-                                            />
-                                            {authMode === 'login' && (
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
-                                                    <a href="#" className="text-[10px] font-semibold text-[#3741d8] hover:underline">Forgot Password?</a>
-                                                </div>
-                                            )}
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Mot de passe</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                            <ShieldCheck size={22} />
                                         </div>
-                                    </div>
-
-                                    {authMode === 'signup' && (
-                                        <div className="flex items-center gap-2 mt-1 mb-2">
-                                            <input type="checkbox" id="terms" className="rounded-sm w-3.5 h-3.5 border-slate-300 text-[#3741d8] focus:ring-[#3741d8] transition-colors cursor-pointer" required />
-                                            <label htmlFor="terms" className="text-[11px] font-medium text-slate-500 cursor-pointer">
-                                                I agree to the Terms & Policy
-                                            </label>
-                                        </div>
-                                    )}
-
-                                    <button 
-                                        type="submit"
-                                        disabled={loading}
-                                        className="w-full py-3 mt-4 rounded-xl font-bold text-[13px] text-white bg-blue-700 hover:bg-blue-800 transition-all active:scale-[0.98] disabled:opacity-50"
-                                        style={{ backgroundColor: '#3741d8' }}
-                                    >
-                                        {loading ? "Please wait..." : (authMode === 'login' ? "Login" : "Sign Up")}
-                                    </button>
-                                </form>
-
-                                <div className="mt-5 text-center text-[12px] font-medium text-slate-500">
-                                    {authMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-                                    <button 
-                                        type="button"
-                                        onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-                                        className="text-[#3741d8] hover:underline font-bold transition-colors"
-                                    >
-                                        {authMode === 'login' ? 'Signup' : 'Login'}
-                                    </button>
-                                </div>
-
-                                <div className="relative py-5">
-                                    <div className="absolute inset-0 flex items-center">
-                                        <div className="w-full border-t border-slate-100"></div>
-                                    </div>
-                                    <div className="relative flex justify-center">
-                                        <span className="px-3 text-[10px] font-medium text-slate-400 bg-white">Or</span>
+                                        <input 
+                                            className="w-full bg-slate-50/50 border border-slate-100 px-16 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-sm font-bold placeholder:text-slate-200 shadow-sm hover:shadow-md"
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                            required
+                                        />
+                                        {authMode === 'login' && (
+                                            <button type="button" className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 hover:text-[#a3e635] uppercase tracking-tighter transition-colors">Oublié ?</button>
+                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-3">
-                                    <button 
-                                        onClick={handleGoogleLogin}
-                                        type="button"
-                                        disabled={loading}
-                                        className="flex-1 border border-slate-200 py-2.5 rounded-lg text-[12px] font-semibold text-slate-700 transition-all hover:bg-slate-50 flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 shadow-sm"
-                                    >
-                                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-[14px] h-[14px]" />
-                                        Login with Google
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        disabled={loading}
-                                        className="flex-1 border border-slate-200 py-2.5 rounded-lg text-[12px] font-semibold text-slate-700 transition-all hover:bg-slate-50 flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 shadow-sm"
-                                    >
-                                        <div className="w-[14px] h-[14px] bg-slate-900 rounded-full flex items-center justify-center text-white pb-0.5">🍎</div>
-                                        Login with Apple
-                                    </button>
-                                </div>
+                                <button 
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full py-5.5 rounded-[24px] font-black text-sm text-[#0f172a] bg-[#a3e635] hover:bg-[#bef264] transition-all active:scale-[0.98] disabled:opacity-50 shadow-2xl shadow-[#a3e635]/30 uppercase tracking-[0.3em] mt-6"
+                                >
+                                    {loading ? "Chargement..." : (authMode === 'login' ? "Se connecter" : "S'inscrire")}
+                                </button>
+                            </form>
 
-                                {loginError && (
-                                    <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-100 text-center">
-                                        <p className="text-[12px] text-red-500 font-semibold mb-2">{loginError}</p>
-                                        <button 
-                                            onClick={() => window.open(window.location.href, '_blank')}
-                                            className="w-full py-2 bg-red-500 text-white rounded-md text-[11px] font-bold hover:bg-red-600 transition-colors uppercase tracking-wider"
-                                        >
-                                            Ouvrir hors de l'iframe
-                                        </button>
+                            <div className="mt-12 text-center text-sm font-bold text-slate-400">
+                                {authMode === 'login' ? "Pas encore de compte ? " : 'Déjà un compte ? '}
+                                <button 
+                                    type="button"
+                                    onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                                    className="text-[#a3e635] hover:underline font-black ml-1 uppercase tracking-widest text-[11px]"
+                                >
+                                    {authMode === 'login' ? "Créer un compte" : "Connexion"}
+                                </button>
+                            </div>
+
+                            <div className="relative py-12">
+                                <div className="absolute inset-0 flex items-center">
+                                    <div className="w-full border-t border-slate-100"></div>
+                                </div>
+                                <div className="relative flex justify-center">
+                                    <span className="px-6 text-[10px] font-black text-slate-300 bg-white uppercase tracking-widest">Ou continuer avec</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-5">
+                                <button 
+                                    onClick={handleGoogleLogin}
+                                    type="button"
+                                    disabled={loading}
+                                    className="bg-slate-50 border border-slate-100 py-5 rounded-[20px] text-[10px] font-black text-slate-800 transition-all hover:bg-slate-100 hover:shadow-md flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 uppercase tracking-[0.2em]"
+                                >
+                                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-[20px] h-[20px]" />
+                                    Google
+                                </button>
+                                <button 
+                                    type="button"
+                                    disabled={loading}
+                                    className="bg-slate-900 py-5 rounded-[20px] text-[10px] font-black text-white transition-all hover:bg-black hover:shadow-xl flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 uppercase tracking-[0.2em]"
+                                >
+                                    <div className="text-xl leading-none"></div>
+                                    Apple
+                                </button>
+                            </div>
+
+                            {loginError && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mt-10 p-6 rounded-[24px] bg-red-50 border border-red-100"
+                                >
+                                    <p className="text-sm text-red-500 font-bold mb-4">{loginError}</p>
+                                    <button 
+                                        onClick={() => window.open(window.location.href, '_blank')}
+                                        className="w-full py-3 bg-red-500 text-white rounded-[16px] text-xs font-black hover:bg-red-600 transition-all uppercase tracking-widest shadow-xl shadow-red-200"
+                                    >
+                                        Sortir de l'iframe
+                                    </button>
+                                </motion.div>
+                            )}
+                        </motion.div>
+                    ) : (
+                        <motion.div 
+                            key="onboarding"
+                            initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: -10 }}
+                            className="w-full max-w-[420px] mx-auto"
+                        >
+                            <div className="text-center mb-16">
+                                {formData.profileImageUrl ? (
+                                    <div className="relative w-28 h-28 mx-auto mb-6 group">
+                                        <div className="absolute inset-0 bg-[#a3e635] rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity" />
+                                        <img 
+                                            src={formData.profileImageUrl} 
+                                            alt="Profile" 
+                                            className="relative w-full h-full object-cover rounded-full border-4 border-white shadow-2xl"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="w-24 h-24 bg-[#a3e635]/10 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-[#a3e635]/20 shadow-inner">
+                                        <User size={40} className="text-[#a3e635]" />
                                     </div>
                                 )}
-                            </motion.div>
-                        ) : (
-                            <motion.div 
-                                key="onboarding"
-                                initial={{ opacity: 0, x: 10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -10 }}
-                                className="w-full max-w-[380px] mx-auto pl-0 md:pl-4"
-                            >
-                                <div className="text-center mb-6">
-                                    {formData.profileImageUrl ? (
-                                        <div className="relative w-20 h-20 mx-auto mb-3">
-                                            <img 
-                                                src={formData.profileImageUrl} 
-                                                alt="Profile" 
-                                                className="w-full h-full object-cover rounded-full border-4 border-white shadow-md"
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 border border-slate-200">
-                                            <User size={24} className="text-slate-400" />
-                                        </div>
-                                    )}
-                                    <h2 className="text-[22px] font-bold text-slate-800 tracking-tight mb-1">Complete Profile</h2>
-                                    <p className="text-[11px] text-slate-400 font-medium">Please provide a few details to continue.</p>
-                                </div>
+                                <h2 className="text-5xl font-black text-slate-900 tracking-tighter mb-4 uppercase leading-none">Profil</h2>
+                                <p className="text-sm md:text-base text-slate-400 font-medium tracking-tight">Dernière étape avant l'accès complet.</p>
+                            </div>
 
-                                <form onSubmit={handleOnboarding} className="space-y-3">
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-slate-700">Full Name</label>
+                            <form onSubmit={handleOnboarding} className="space-y-6">
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Nom complet</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                            <User size={20} />
+                                        </div>
                                         <input 
                                             type="text"
                                             required
                                             value={formData.fullName}
                                             onChange={e => setFormData(prev => ({...prev, fullName: e.target.value}))}
-                                            className="w-full border border-slate-200 px-3 py-2.5 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium"
+                                            className="w-full bg-slate-50/50 border border-slate-100 px-16 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-sm font-bold shadow-sm"
+                                            placeholder="JEAN DUPONT"
                                         />
                                     </div>
-                                    
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-slate-700">Occupation</label>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Profession / Activité</label>
+                                    <div className="relative group">
+                                        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                            <Briefcase size={20} />
+                                        </div>
                                         <input 
                                             type="text"
                                             required
                                             value={formData.occupation}
                                             onChange={e => setFormData(prev => ({...prev, occupation: e.target.value}))}
-                                            className="w-full border border-slate-200 px-3 py-2.5 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium"
+                                            className="w-full bg-slate-50/50 border border-slate-100 px-16 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-sm font-bold shadow-sm"
+                                            placeholder="AGRICULTEUR, VENDEUR..."
                                         />
                                     </div>
+                                </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[11px] font-bold text-slate-700">Phone</label>
+                                <div className="grid grid-cols-2 gap-5">
+                                    <div className="space-y-3">
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Tél.</label>
+                                        <div className="relative group">
+                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                                <Phone size={18} />
+                                            </div>
                                             <input 
                                                 type="tel"
                                                 required
                                                 value={formData.phone}
                                                 onChange={e => setFormData(prev => ({...prev, phone: e.target.value}))}
-                                                className="w-full border border-slate-200 px-3 py-2.5 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium"
+                                                className="w-full bg-slate-50/50 border border-slate-100 pl-14 pr-4 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-xs font-bold shadow-sm"
+                                                placeholder="+243..."
                                             />
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[11px] font-bold text-slate-700">City</label>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 ml-1">Ville</label>
+                                        <div className="relative group">
+                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#a3e635] transition-all duration-300">
+                                                <MapPin size={18} />
+                                            </div>
                                             <input 
                                                 type="text"
                                                 required
                                                 value={formData.city}
                                                 onChange={e => setFormData(prev => ({...prev, city: e.target.value}))}
-                                                className="w-full border border-slate-200 px-3 py-2.5 rounded-lg outline-none focus:border-[#3741d8] focus:ring-1 focus:ring-[#3741d8] transition-all text-[13px] bg-slate-50 text-slate-900 font-medium"
+                                                className="w-full bg-slate-50/50 border border-slate-100 pl-14 pr-4 py-5 rounded-[24px] outline-none focus:bg-white focus:border-[#a3e635] focus:ring-8 focus:ring-[#a3e635]/5 transition-all text-xs font-bold shadow-sm"
+                                                placeholder="KINSHASA"
                                             />
                                         </div>
                                     </div>
+                                </div>
 
-                                    <button 
-                                        type="submit"
-                                        disabled={loading}
-                                        className="w-full py-3 mt-4 rounded-xl font-bold text-[13px] text-white transition-all active:scale-[0.98] disabled:opacity-50 flex justify-center items-center gap-2"
-                                        style={{ backgroundColor: '#3741d8' }}
-                                    >
-                                        {loading ? "Please wait..." : "Continue to App"} 
-                                    </button>
+                                <button 
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full py-5.5 mt-6 rounded-[24px] font-black text-sm text-[#0f172a] bg-[#a3e635] hover:bg-[#bef264] transition-all active:scale-[0.98] disabled:opacity-50 shadow-2xl shadow-[#a3e635]/30 uppercase tracking-[0.3em]"
+                                >
+                                    {loading ? "Chargement..." : "LANCER L'EXPÉRIENCE"} 
+                                </button>
 
-                                    {onboardingError && (
-                                        <p className="text-[11px] text-red-500 font-semibold text-center mt-2">{onboardingError}</p>
-                                    )}
-                                </form>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                                {onboardingError && (
+                                    <div className="p-4 bg-red-50 border border-red-100 rounded-[20px] text-center">
+                                        <p className="text-[10px] text-red-500 font-black uppercase tracking-widest">{onboardingError}</p>
+                                    </div>
+                                )}
+                            </form>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Footer Credits */}
+                <div className="absolute bottom-8 left-0 right-0 text-center text-[10px] font-black text-slate-200 uppercase tracking-[0.5em] hidden md:block">
+                    Digital Agency // Design by Djapero
                 </div>
-
             </div>
         </div>
     );

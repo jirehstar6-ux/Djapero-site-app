@@ -18,6 +18,7 @@ import Videos from "./pages/Videos";
 import Admin from "./pages/Admin";
 import Auth from "./pages/Auth";
 import InstallPWA from "./components/InstallPWA";
+import InitialLoading from "./components/layout/InitialLoading";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { useEffect } from "react";
@@ -77,25 +78,7 @@ function AppContent() {
     }
   }, [user, profile, isAdmin, loading, location.pathname, navigate, isAuthPage, isBienvenuePage]);
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-white p-6 text-center">
-      <div className="flex flex-col items-center gap-6 max-w-sm">
-        <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin shadow-[0_0_30px_rgba(16,185,129,0.1)]"></div>
-        <div className="space-y-2">
-          <p className="text-gray-400 font-black uppercase tracking-[0.3em] text-[10px]">Djapero Group Initialisation (v1.2)...</p>
-          <p className="text-gray-300 text-[8px] font-bold uppercase tracking-widest italic">Attente de la connexion sécurisée</p>
-        </div>
-        
-        {/* Force Bypass for network issues */}
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-8 px-6 py-2 rounded-full border border-gray-100 text-gray-400 hover:text-gray-600 hover:border-gray-200 transition-all text-[8px] font-black uppercase tracking-widest"
-        >
-          Si bloqué, cliquez pour recharger
-        </button>
-      </div>
-    </div>
-  );
+  if (loading) return <InitialLoading />;
 
   const hideLayout = isAuthPage || isAdminPage || isBienvenuePage;
   const hideFooter = isAuthPage || isAdminPage || isBienvenuePage;

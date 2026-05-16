@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useData } from '../../hooks/useData';
+import { ShoppingBag } from 'lucide-react';
 
 interface LogoProps {
   className?: string;
@@ -6,28 +8,24 @@ interface LogoProps {
 }
 
 export default function Logo({ className = "", size = 40 }: LogoProps) {
+  const { data } = useData();
   const [hasError, setHasError] = useState(false);
+  const logoUrl = data?.settings?.logoUrl;
 
   return (
     <div 
-      className={`relative flex items-center justify-center rounded-2xl overflow-hidden shadow-lg ${hasError ? 'bg-[#04d333] text-white font-black' : ''} ${className}`}
+      className={`relative flex items-center justify-center rounded-2xl overflow-hidden shadow-lg ${hasError || !logoUrl ? 'bg-[#a3e635] text-[#0f172a] font-black' : ''} ${className}`}
       style={{ width: size, height: size, minWidth: size, minHeight: size }}
     >
-      {!hasError ? (
+      {logoUrl && !hasError ? (
         <img 
-          src="/logo.jpg" 
+          src={logoUrl} 
           alt="Djapero Logo" 
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            if (e.currentTarget.src.includes('logo.jpg')) {
-               e.currentTarget.src = '/logo.png';
-            } else {
-               setHasError(true);
-            }
-          }}
+          className="w-full h-full object-contain"
+          onError={() => setHasError(true)}
         />
       ) : (
-        <span style={{ fontSize: size * 0.4 }}>DJ</span>
+        <ShoppingBag size={size * 0.6} strokeWidth={2.5} />
       )}
     </div>
   );

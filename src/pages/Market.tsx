@@ -251,7 +251,7 @@ export default function Market() {
                                 className={`group rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border cursor-pointer flex flex-col h-full ${isLight ? 'bg-white border-slate-100' : 'bg-[#0f172a] border-white/5'}`}
                             >
                                 {/* Image Container */}
-                                <div className={`aspect-[4/5] overflow-hidden relative ${isLight ? 'bg-slate-50' : 'bg-black/20'}`}>
+                                <div className={`aspect-square overflow-hidden relative ${isLight ? 'bg-slate-50' : 'bg-black/20'}`}>
                                     <img 
                                         src={item.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400"} 
                                         alt={item.name}
@@ -273,7 +273,7 @@ export default function Market() {
                                 <div className="p-8 flex-1 flex flex-col">
                                     <div className="flex items-center gap-2 mb-2">
                                         <div className="w-6 h-0.5 bg-orange-500/30 rounded-full" />
-                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{item.shopName}</span>
+                                        <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{item.shopName}</span>
                                     </div>
                                     <h3 className={`text-xl font-black uppercase tracking-tighter leading-tight mb-4 line-clamp-2 min-h-[3rem] ${isLight ? 'text-slate-800' : 'text-white'}`}>
                                         {item.name}
@@ -285,7 +285,7 @@ export default function Market() {
                                                 {item.price} <span className="text-[10px] text-slate-400">XAF</span>
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-1.5 text-slate-300 group-hover:text-amber-500 transition-colors">
+                                        <div className={`flex items-center gap-1.5 ${isLight ? 'text-slate-500' : 'text-slate-400'} group-hover:text-amber-500 transition-colors`}>
                                             <MapPin size={12} strokeWidth={3} />
                                             <span className="text-[9px] font-black uppercase tracking-widest">{item.location}</span>
                                         </div>
@@ -343,7 +343,7 @@ export default function Market() {
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            className={`relative w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh] z-10 border ${isLight ? 'bg-white border-white' : 'bg-[#0f172a] border-white/10'}`}
+                            className={`relative w-full max-w-5xl rounded-[2rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh] z-10 border ${isLight ? 'bg-white border-white' : 'bg-[#0f172a] border-white/10'}`}
                         >
                             <button 
                                 onClick={() => setSelectedItem(null)}
@@ -353,19 +353,19 @@ export default function Market() {
                             </button>
 
                             {/* Left Side: Image */}
-                            <div className="w-full md:w-1/2 h-64 md:h-auto bg-gray-50 overflow-hidden relative">
+                            <div className="w-full md:w-2/5 aspect-[4/3] md:aspect-auto bg-gray-50 overflow-hidden relative rounded-t-[2rem] md:rounded-l-[2rem] md:rounded-tr-none">
                                 <img 
                                     src={selectedItem.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
                                     alt={selectedItem.name}
                                     className="w-full h-full object-cover"
                                 />
-                                <div className="absolute top-4 left-4 bg-orange-500 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl ring-2 ring-white">
+                                <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm text-gray-900 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">
                                     Article du Marché
                                 </div>
                             </div>
 
                             {/* Right Side: Content */}
-                            <div className="w-full md:w-1/2 p-6 md:p-12 flex flex-col overflow-y-auto no-scrollbar">
+                            <div className="w-full md:w-3/5 p-6 md:p-8 flex flex-col overflow-y-auto no-scrollbar">
                                 <div className="mb-6">
                                     <div className="flex items-center gap-2 mb-3">
                                         <div className="w-8 h-1 bg-orange-500 rounded-full" />

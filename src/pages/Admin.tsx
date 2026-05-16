@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, ShoppingBag, StoreIcon, VideoIcon, Bell, Settings, Save, Upload, Trash2, Plus, Image as ImageIcon, Users, Mail, Eye, Calendar, MessageSquare, CheckCircle, Clock } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, StoreIcon, VideoIcon, Bell, Settings, Save, Upload, Trash2, Plus, Image as ImageIcon, Users, Mail, Eye, Calendar, MessageSquare, CheckCircle, Clock, Sparkles } from 'lucide-react';
 import { db, auth, storage } from '../lib/firebase';
 import { doc, getDoc, setDoc, collection, onSnapshot, query, orderBy, limit, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -120,7 +120,7 @@ export default function Admin() {
         }
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'product' | 'marche' | 'team' | 'welcome' | 'ad' | 'animCat' | 'animMarche' | 'animLiv' | 'animServ' | 'animEquipe') => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'product' | 'marche' | 'team' | 'welcome' | 'ad' | 'animCat' | 'animMarche' | 'animLiv' | 'animServ' | 'animEquipe' | 'logo') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -153,7 +153,9 @@ export default function Admin() {
 
                 const dataUrl = canvas.toDataURL('image/webp', type === 'welcome' ? 0.8 : 0.7);
                 
-                if (type === 'team') {
+                if (type === 'logo') {
+                    setAccueilSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+                } else if (type === 'team') {
                     setTeamForm(prev => ({ ...prev, img: dataUrl }));
                     setPreviewImage(dataUrl);
                 } else if (type === 'product') {
@@ -188,16 +190,18 @@ export default function Admin() {
         bannerDesc: "",
         welcomeTitle: "",
         welcomeSubtitle: "",
+        welcomeVideoUrl: "",
         welcomeBtnText: "",
         welcomeBtnLink: "",
         welcomeBadgeText: "",
         welcomeBgColor: "",
         welcomeImage: "",
+        logoUrl: "",
         animCatalogImage: "",
         animMarketImage: "",
         animDeliveryImage: "",
         animServicesImage: "",
-        animTeamImage: ""
+        animTeamImage: "",
     });
 
     useEffect(() => {
@@ -209,16 +213,18 @@ export default function Admin() {
                 bannerDesc: appData.settings.bannerDesc || "",
                 welcomeTitle: appData.settings.welcomeTitle || "Bienvenue sur\nDjapéro !",
                 welcomeSubtitle: appData.settings.welcomeSubtitle || "Votre panier frais.",
+                welcomeVideoUrl: appData.settings.welcomeVideoUrl || "",
                 welcomeBtnText: appData.settings.welcomeBtnText || "Explorer",
                 welcomeBtnLink: appData.settings.welcomeBtnLink || "/produits",
                 welcomeBadgeText: appData.settings.welcomeBadgeText || "LADY",
                 welcomeBgColor: appData.settings.welcomeBgColor || "#1b4332",
                 welcomeImage: appData.settings.welcomeImage || "",
+                logoUrl: appData.settings.logoUrl || "",
                 animCatalogImage: appData.settings.animCatalogImage || "",
                 animMarketImage: appData.settings.animMarketImage || "",
                 animDeliveryImage: appData.settings.animDeliveryImage || "",
                 animServicesImage: appData.settings.animServicesImage || "",
-                animTeamImage: appData.settings.animTeamImage || ""
+                animTeamImage: appData.settings.animTeamImage || "",
             });
         }
     }, [appData.settings]);
@@ -282,10 +288,7 @@ export default function Admin() {
                     setPrestationInput("");
                     setEditingId(null);
                 }
-            } else if (activeTab === "affiches") {
-                success = await addAd({ ...adForm, createdAt: Date.now() });
-                if (success) setAdForm({ title: "", subtitle: "", price: "", imageUrl: "", link: "", active: true });
-            }
+            } // Close activeTab === "team"
 
             if (success) {
                 setShowAddModal(false);
@@ -358,12 +361,12 @@ export default function Admin() {
                     <nav className="flex-grow space-y-2">
                         {[
                             { id: "accueil", label: "Dashboard", icon: LayoutDashboard },
+                            { id: "bienvenue", label: "Bienvenue", icon: Sparkles },
                             { id: "produits", label: "Catalogue", icon: ShoppingBag },
                             { id: "marche", label: "Marché", icon: StoreIcon },
                             { id: "videos", label: "Médias", icon: VideoIcon },
                             { id: "visiteurs", label: "Visiteurs", icon: Users },
                             { id: "messages", label: "Messagerie", icon: Mail },
-                            { id: "affiches", label: "Affiches", icon: ImageIcon },
                             { id: "team", label: "Équipe", icon: Plus },
                             { id: "notifications", label: "Alertes", icon: Bell },
                             { id: "parametres", label: "Settings", icon: Settings },
@@ -430,320 +433,6 @@ export default function Admin() {
                                 exit={{ opacity: 0, x: -10 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                {activeTab === "affiches" && (
-                                    <div className="max-w-3xl">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div>
-                                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tighter">Gestion des Affiches</h2>
-                                                <p className="text-slate-500 font-bold mt-0 uppercase tracking-widest text-[8px]">Personnalisez le bandeau d'accueil principal</p>
-                                            </div>
-                                        </div>
-
-                                        <form className="space-y-4" onSubmit={handleAccueilSubmit}>
-                                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-50 space-y-6">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                    <div className="space-y-4">
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Gros titre (Affiche)</label>
-                                                            <textarea 
-                                                                rows={2}
-                                                                value={accueilSettings.welcomeTitle} 
-                                                                onChange={e => updateAccueilField('welcomeTitle', e.target.value)}
-                                                                className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-100 focus:border-indigo-400 outline-none font-black text-base transition-all" 
-                                                                placeholder="Bienvenue sur\nDjapéro !"
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Petit texte / Slogan</label>
-                                                            <input 
-                                                                value={accueilSettings.welcomeSubtitle} 
-                                                                onChange={e => updateAccueilField('welcomeSubtitle', e.target.value)}
-                                                                className="w-full bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 focus:border-indigo-400 outline-none font-bold text-[10px] uppercase tracking-widest text-slate-500" 
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Couleur de fond (Hex)</label>
-                                                            <div className="flex gap-2">
-                                                                <input 
-                                                                    type="color"
-                                                                    value={accueilSettings.welcomeBgColor} 
-                                                                    onChange={e => updateAccueilField('welcomeBgColor', e.target.value)}
-                                                                    className="w-10 h-10 rounded-lg border-none p-0 cursor-pointer overflow-hidden shrink-0" 
-                                                                />
-                                                                <input 
-                                                                    value={accueilSettings.welcomeBgColor} 
-                                                                    onChange={e => updateAccueilField('welcomeBgColor', e.target.value)}
-                                                                    className="flex-1 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 focus:border-indigo-400 outline-none font-mono text-xs" 
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Image de fond (Affiche)</label>
-                                                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                                                <div className="relative w-12 h-12 bg-white rounded-lg overflow-hidden shadow-inner flex items-center justify-center border border-dashed border-slate-200 group cursor-pointer shrink-0">
-                                                                    {accueilSettings.welcomeImage ? (
-                                                                        <img src={accueilSettings.welcomeImage || undefined} className="w-full h-full object-cover" alt="Banner" />
-                                                                    ) : (
-                                                                        <ImageIcon className="text-slate-300" size={18} />
-                                                                    )}
-                                                                    <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'welcome')} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                                                </div>
-                                                                <div className="flex-1 text-[8px] font-bold text-slate-400 uppercase leading-tight">
-                                                                    Télécharger<br/>l'affiche
-                                                                </div>
-                                                                {accueilSettings.welcomeImage && (
-                                                                    <button 
-                                                                        type="button"
-                                                                        onClick={() => setAccueilSettings(prev => ({ ...prev, welcomeImage: "" }))}
-                                                                        className="text-red-400 hover:text-red-600 transition-colors p-1"
-                                                                    >
-                                                                        <Trash2 size={14} />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    <div className="space-y-4">
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div className="space-y-1.5">
-                                                                <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Texte Bouton</label>
-                                                                <input 
-                                                                    value={accueilSettings.welcomeBtnText} 
-                                                                    onChange={e => updateAccueilField('welcomeBtnText', e.target.value)}
-                                                                    className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 focus:border-indigo-400 outline-none font-bold text-[10px]" 
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Badge (ex: LADY)</label>
-                                                                <input 
-                                                                    value={accueilSettings.welcomeBadgeText} 
-                                                                    onChange={e => updateAccueilField('welcomeBadgeText', e.target.value)}
-                                                                    className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 focus:border-indigo-400 outline-none font-black text-[10px] uppercase" 
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Lien du bouton</label>
-                                                            <input 
-                                                                value={accueilSettings.welcomeBtnLink} 
-                                                                onChange={e => updateAccueilField('welcomeBtnLink', e.target.value)}
-                                                                className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 focus:border-indigo-400 outline-none font-bold text-[10px] text-slate-400" 
-                                                                placeholder="/produits or URL"
-                                                            />
-                                                        </div>
-                                                        
-                                                        {/* Preview */}
-                                                        <div>
-                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1 mb-1.5 block">Aperçu direct</label>
-                                                                <div 
-                                                                    className="p-5 rounded-2xl shadow-lg relative overflow-hidden h-[160px] flex items-center"
-                                                                    style={{ 
-                                                                        background: accueilSettings.welcomeBgColor 
-                                                                            ? `linear-gradient(120deg, ${accueilSettings.welcomeBgColor} 0%, ${accueilSettings.welcomeBgColor}CC 100%)` 
-                                                                            : 'linear-gradient(120deg, #f0fdf4 0%, #dcfce7 100%)',
-                                                                    }}
-                                                                >
-                                                                    {accueilSettings.welcomeImage && (
-                                                                        <div 
-                                                                            className="absolute inset-y-0 right-0 z-0 opacity-100 w-2/3" 
-                                                                            style={{
-                                                                                backgroundImage: `url(${accueilSettings.welcomeImage})`,
-                                                                                backgroundSize: 'contain',
-                                                                                backgroundPosition: 'right bottom',
-                                                                                backgroundRepeat: 'no-repeat'
-                                                                            }}
-                                                                        />
-                                                                    )}
-                                                                    {accueilSettings.welcomeImage && (
-                                                                        <div 
-                                                                            className="absolute inset-0 z-0 pointer-events-none"
-                                                                            style={{
-                                                                                background: `linear-gradient(to right, ${accueilSettings.welcomeBgColor || '#f0fdf4'} 45%, ${accueilSettings.welcomeBgColor ? accueilSettings.welcomeBgColor + '88' : 'transparent'} 75%, transparent 100%)`
-                                                                            }}
-                                                                        />
-                                                                    )}
-                                                                    <div className="relative z-10 w-full flex justify-between items-center">
-                                                                        <div className="max-w-[70%]">
-                                                                            <h4 className="text-white !text-white font-black text-[12px] whitespace-pre-line leading-tight mb-1 drop-shadow-sm">{accueilSettings.welcomeTitle}</h4>
-                                                                            <p className="text-white/80 !text-white/80 font-bold text-[8px] uppercase tracking-widest mb-3 drop-shadow-sm">{accueilSettings.welcomeSubtitle}</p>
-                                                                            <span className="bg-emerald-500 text-white text-[8px] font-black py-1.5 px-4 rounded-full shadow-lg shadow-emerald-500/30 uppercase">{accueilSettings.welcomeBtnText}</span>
-                                                                        </div>
-                                                                        <div className="w-12 h-12 rounded-full border border-white/30 flex items-center justify-center bg-white/10 backdrop-blur-md shrink-0 ml-4">
-                                                                            <span className="text-[9px] text-white !text-white font-black drop-shadow-sm">{accueilSettings.welcomeBadgeText}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Animation Images Uploads */}
-                                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-50 space-y-6 mt-8">
-                                                <div className="border-b border-slate-100 pb-4 mb-4">
-                                                    <h3 className="text-lg font-black text-indigo-600 uppercase tracking-wider">Images Animation D'Inscription</h3>
-                                                    <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">Personnalisez les 5 cartes de l'animation</p>
-                                                </div>
-                                                
-                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                                    {/* Card 1: Catalogue */}
-                                                    <div className="space-y-1.5 flex flex-col items-center">
-                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Catalogue</label>
-                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
-                                                            {accueilSettings.animCatalogImage ? (
-                                                                <img src={accueilSettings.animCatalogImage} className="w-full h-full object-cover" alt="Catalog Anim" />
-                                                            ) : (
-                                                                <ImageIcon className="text-slate-300" size={24} />
-                                                            )}
-                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animCat')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
-                                                        </div>
-                                                        {accueilSettings.animCatalogImage && (
-                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animCatalogImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {/* Card 2: Marche */}
-                                                    <div className="space-y-1.5 flex flex-col items-center">
-                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Marché</label>
-                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
-                                                            {accueilSettings.animMarketImage ? (
-                                                                <img src={accueilSettings.animMarketImage} className="w-full h-full object-cover" alt="Market Anim" />
-                                                            ) : (
-                                                                <ImageIcon className="text-slate-300" size={24} />
-                                                            )}
-                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animMarche')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
-                                                        </div>
-                                                        {accueilSettings.animMarketImage && (
-                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animMarketImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Card 3: Livraison */}
-                                                    <div className="space-y-1.5 flex flex-col items-center">
-                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Livraison</label>
-                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
-                                                            {accueilSettings.animDeliveryImage ? (
-                                                                <img src={accueilSettings.animDeliveryImage} className="w-full h-full object-cover" alt="Delivery Anim" />
-                                                            ) : (
-                                                                <ImageIcon className="text-slate-300" size={24} />
-                                                            )}
-                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animLiv')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
-                                                        </div>
-                                                        {accueilSettings.animDeliveryImage && (
-                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animDeliveryImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Card 4: Services */}
-                                                    <div className="space-y-1.5 flex flex-col items-center">
-                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Services</label>
-                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
-                                                            {accueilSettings.animServicesImage ? (
-                                                                <img src={accueilSettings.animServicesImage} className="w-full h-full object-cover" alt="Services Anim" />
-                                                            ) : (
-                                                                <ImageIcon className="text-slate-300" size={24} />
-                                                            )}
-                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animServ')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
-                                                        </div>
-                                                        {accueilSettings.animServicesImage && (
-                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animServicesImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Card 5: Equipe */}
-                                                    <div className="space-y-1.5 flex flex-col items-center">
-                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Équipe</label>
-                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
-                                                            {accueilSettings.animTeamImage ? (
-                                                                <img src={accueilSettings.animTeamImage} className="w-full h-full object-cover" alt="Team Anim" />
-                                                            ) : (
-                                                                <ImageIcon className="text-slate-300" size={24} />
-                                                            )}
-                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animEquipe')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
-                                                        </div>
-                                                        {accueilSettings.animTeamImage && (
-                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animTeamImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                                <div className="flex flex-col items-center pt-2 relative">
-                                                    <button type="submit" disabled={isSaving} className="w-fit px-8 bg-indigo-600 text-white h-8 rounded-full font-black uppercase tracking-widest text-[8px] shadow-lg shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                                        {isSaving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={12} />}
-                                                        <span>PUBLIER</span>
-                                                    </button>
-                                                    
-                                                    <AnimatePresence>
-                                                        {showSuccess && (
-                                                            <motion.div 
-                                                                initial={{ opacity: 0, y: 10 }}
-                                                                animate={{ opacity: 1, y: 0 }}
-                                                                exit={{ opacity: 0 }}
-                                                                className="mt-1.5 text-emerald-500 text-[8px] font-black uppercase tracking-widest"
-                                                            >
-                                                                ✓ Mise à jour réussie
-                                                            </motion.div>
-                                                        )}
-                                                        {saveError && (
-                                                            <motion.div 
-                                                                initial={{ opacity: 0, y: 10 }}
-                                                                animate={{ opacity: 1, y: 0 }}
-                                                                exit={{ opacity: 0 }}
-                                                                className="mt-1.5 text-red-500 text-[8px] font-black uppercase tracking-widest"
-                                                            >
-                                                                ⚠️ {saveError}
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
-                                                </div>
-                                        </form>
-
-                                        {/* Affiches Latérales (Ads) */}
-                                        <div className="mt-12">
-                                            <div className="flex items-center justify-between mb-6">
-                                                <div>
-                                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Affiches Latérales</h3>
-                                                    <p className="text-slate-500 font-bold mt-1 text-[10px] uppercase tracking-widest">Affichez des promos sur le côté (2 max. visibles sur l'accueil)</p>
-                                                </div>
-                                                <button 
-                                                    onClick={() => { setAdForm({ title: "", subtitle: "", price: "", imageUrl: "", link: "", active: true }); setEditingId(null); setShowAddModal(true); }}
-                                                    className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-lg shadow-slate-900/20"
-                                                >
-                                                    <Plus size={20} />
-                                                </button>
-                                            </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                {appData.ads?.map(ad => (
-                                                    <div key={ad.id} className="bg-white p-4 rounded-3xl shadow-sm border border-slate-50 relative group">
-                                                        <div className="flex gap-4">
-                                                            <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-inner bg-slate-50 shrink-0 relative">
-                                                                <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover" />
-                                                            </div>
-                                                            <div className="flex-1 py-1 pr-6">
-                                                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-tight mb-0.5">{ad.subtitle}</p>
-                                                                <h4 className="font-black text-slate-800 leading-tight">{ad.title}</h4>
-                                                                {ad.price && <p className="text-sm font-bold text-slate-500 mt-1">{ad.price}</p>}
-                                                            </div>
-                                                        </div>
-                                                        <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => deleteAd(ad.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors">
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {(!appData.ads || appData.ads.length === 0) && (
-                                                    <div className="col-span-1 sm:col-span-2 p-8 text-center border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-bold uppercase tracking-widest text-[10px]">
-                                                        Aucune affiche latérale n'a été ajoutée
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {activeTab === "accueil" && (
                                     <div className="space-y-8">
                                         <div className="flex items-end justify-between">
@@ -774,6 +463,70 @@ export default function Admin() {
                                                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{stat.label}</p>
                                                 </div>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === "bienvenue" && (
+                                    <div className="max-w-2xl space-y-8">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Bienvenue (Page d'Accueil)</h2>
+                                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-50 space-y-3">
+                                            <div className="space-y-0.5">
+                                                <label className="text-[7px] font-black uppercase text-slate-400 ml-2">Titre (Bienvenue)</label>
+                                                <input value={accueilSettings.welcomeTitle} onChange={e => updateAccueilField('welcomeTitle', e.target.value)} className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 outline-none font-black uppercase tracking-tighter text-xs" />
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <label className="text-[7px] font-black uppercase text-slate-400 ml-2">Sous-titre (Bienvenue)</label>
+                                                <input value={accueilSettings.welcomeSubtitle} onChange={e => updateAccueilField('welcomeSubtitle', e.target.value)} className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 outline-none font-bold text-[10px]" />
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <label className="text-[7px] font-black uppercase text-slate-400 ml-2">URL Video (Bienvenue)</label>
+                                                <input value={accueilSettings.welcomeVideoUrl} onChange={e => updateAccueilField('welcomeVideoUrl', e.target.value)} className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 outline-none font-medium text-[10px]" placeholder="https://..." />
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <label className="text-[7px] font-black uppercase text-slate-400 ml-2">Image de fond</label>
+                                                 <div className="flex items-center gap-3">
+                                                    <div className="relative w-16 h-16 bg-slate-100 rounded-lg overflow-hidden border border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-400">
+                                                        {accueilSettings.welcomeImage ? (
+                                                            <img src={accueilSettings.welcomeImage} alt="Preview" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Upload className="text-slate-300" size={16} />
+                                                        )}
+                                                        <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'welcome')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <label className="text-[7px] font-black uppercase text-slate-400 ml-2">Images des sections (Animations)</label>
+                                                 <div className="grid grid-cols-5 gap-4">
+                                                    {[
+                                                        { label: 'Catalogue', field: 'animCatalogImage', type: 'animCat' },
+                                                        { label: 'Marché', field: 'animMarketImage', type: 'animMarche' },
+                                                        { label: 'Livraison', field: 'animDeliveryImage', type: 'animLiv' },
+                                                        { label: 'Services', field: 'animServicesImage', type: 'animServ' },
+                                                        { label: 'Équipe', field: 'animTeamImage', type: 'animEquipe' },
+                                                    ].map((item: any) => (
+                                                        <div key={item.label} className="flex flex-col items-center">
+                                                            <div className="relative w-full aspect-square bg-slate-100 rounded-lg overflow-hidden border border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-400">
+                                                                {accueilSettings[item.field as keyof typeof accueilSettings] ? (
+                                                                    <img src={accueilSettings[item.field as keyof typeof accueilSettings]} alt={item.label} className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <Upload className="text-slate-300" size={12} />
+                                                                )}
+                                                                <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, item.type as any)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                            </div>
+                                                            <span className="text-[6px] font-bold text-slate-500 uppercase mt-[-8px]">{item.label}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={handleAccueilSubmit}
+                                                disabled={isSaving}
+                                                className="w-full py-2 bg-indigo-600 text-white rounded-lg font-black uppercase text-[8px] tracking-[0.1em] shadow-lg shadow-indigo-100"
+                                            >
+                                                {isSaving ? "Sauvegarde..." : "Enregistrer les modifications"}
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -811,7 +564,22 @@ export default function Admin() {
                                         <form className="space-y-6" onSubmit={handleAccueilSubmit}>
                                             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-50 space-y-8">
                                                 <div className="border-b border-slate-100 pb-4">
-                                                    <h3 className="text-lg font-black text-indigo-600 uppercase tracking-wider">A & Titres</h3>
+                                                                                                         <h3 className="text-lg font-black text-indigo-600 uppercase tracking-wider">Logo & Titres</h3>
+                                                     <div className="mt-2 flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                         <div className="relative w-12 h-12 bg-white rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-400">
+                                                             {accueilSettings.logoUrl ? (
+                                                                 <img src={accueilSettings.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+                                                             ) : (
+                                                                 <Upload className="text-slate-300" size={16} />
+                                                             )}
+                                                             <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'logo')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                         </div>
+                                                         <div>
+                                                            <p className="text-[10px] font-black uppercase text-slate-800">Logo Dashboard</p>
+                                                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Importer votre logo ici</p>
+                                                         </div>
+                                                     </div>
+
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                     <div className="space-y-6">

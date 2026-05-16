@@ -51,6 +51,10 @@ export default function Sidebar() {
     const SidebarContent = ({ showText = false }: { showText?: boolean }) => (
         <div className={`flex flex-col items-center justify-start py-6 rounded-[32px] w-16 bg-transparent border-0 shadow-none ${showText ? 'w-full px-4' : ''}`}>
             
+            <div className="mb-6">
+                <Logo size={40} className="shadow-emerald-500/20" />
+            </div>
+
             {/* User Profile in Sidebar */}
             <div className={`flex flex-col items-center mb-4`}>
                 <div className={`rounded-full border overflow-hidden ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>

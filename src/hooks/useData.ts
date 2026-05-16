@@ -174,6 +174,7 @@ export interface Settings {
     heroImage?: string;
     heroMode?: 'video' | 'image';
     adminCustomCode?: string;
+    logoUrl?: string;
 }
 
 export interface Notification {
