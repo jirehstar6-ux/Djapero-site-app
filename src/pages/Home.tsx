@@ -1,242 +1,280 @@
-import { Heart, MessageCircle, ChevronRight, ArrowRight, Star, ShoppingBag, Plus, Play, Bell, Mail, Search, Volume2, VolumeX, MousePointer2, Zap, LayoutDashboard, Store, Truck, Briefcase, Activity } from "lucide-react";
 import { useData } from "../hooks/useData";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
-import Landing from "../components/Landing";
-import Logo from "../components/layout/Logo";
-import "../css/dashboard.css";
-import React from "react";
-
-import { useTheme } from "../context/ThemeContext";
+import { Link, useNavigate } from "react-router-dom";
+import { 
+    ShoppingBag, 
+    Store, 
+    Briefcase, 
+    Video, 
+    Truck, 
+    Users, 
+    Sparkles, 
+    ArrowRight,
+    Search,
+    Bell,
+    Settings as SettingsIcon,
+    LayoutDashboard
+} from "lucide-react";
 
 export default function Home() {
     const { data, loading } = useData();
-    const { user, profile } = useAuth();
-    const { theme } = useTheme();
-    const isLight = theme === 'light';
+    const { user, profile, isAdmin } = useAuth();
     const navigate = useNavigate();
-    const [selectedProduct, setSelectedProduct] = React.useState<any>(null);
 
     if (loading || !data) return (
-        <div className="fixed inset-0 bg-[#020617] flex flex-col items-center justify-center">
-            <motion.div 
-                animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
-                transition={{ repeat: Infinity, duration: 3 }}
-                className="w-32 h-32 bg-[#22c55e] rounded-full blur-3xl opacity-20"
-            />
-            <div className="relative">
-                <Logo size={120} className="rounded-[2.5rem] shadow-[0_0_50px_rgba(34,197,94,0.3)] transition-transform animate-pulse" />
-            </div>
-            <p className="mt-12 text-white/40 font-black uppercase tracking-[0.8em] text-[10px] animate-pulse pl-[0.8em]">Djapero</p>
+        <div className="min-h-screen flex items-center justify-center bg-[#f7f8fa]">
+            <div className="w-12 h-12 border-4 border-[#a3e635] border-t-transparent rounded-full animate-spin" />
         </div>
     );
 
-    // If guest, show the Landing Page
-    if (!user) {
-        return <Landing />;
-    }
-
-    const products = data?.products || [];
-    const marketItems = data?.marketItems || [];
-
-    const stats = [
-        { label: "Commandes", value: "24", icon: ShoppingBag, color: "text-[#a3e635]" },
-        { label: "Activité", value: "Premium", icon: Activity, color: "text-emerald-400" },
-        { label: "Récompenses", value: "1250 pts", icon: Star, color: "text-amber-400" },
+    const navItems = [
+        { 
+            name: "Catalogue", 
+            path: "/produits", 
+            icon: ShoppingBag, 
+            color: "from-blue-500 to-blue-600", 
+            count: data.products?.length || 0,
+            desc: "Découvrez nos produits frais"
+        },
+        { 
+            name: "Marché", 
+            path: "/marché", 
+            icon: Store, 
+            color: "from-emerald-500 to-emerald-600", 
+            count: data.marketProducts?.length || 0,
+            desc: "Le meilleur de nos producteurs"
+        },
+        { 
+            name: "Services", 
+            path: "/services", 
+            icon: Briefcase, 
+            color: "from-purple-500 to-purple-600", 
+            count: data.services?.length || 0,
+            desc: "Solutions sur mesure"
+        },
+        { 
+            name: "Vidéos", 
+            path: "/videos", 
+            icon: Video, 
+            color: "from-red-500 to-red-600", 
+            count: data.videos?.length || 0,
+            desc: "Djapero en action"
+        },
+        { 
+            name: "Livraison", 
+            path: "/livraison", 
+            icon: Truck, 
+            color: "from-amber-500 to-amber-600",
+            desc: "Suivez vos colis en direct"
+        },
+        { 
+            name: "Équipe", 
+            path: "/equipe", 
+            icon: Users, 
+            color: "from-indigo-500 to-indigo-600", 
+            count: data.team?.length || 0,
+            desc: "Rencontrez les experts"
+        },
     ];
 
     return (
-        <div className={`min-h-screen pb-20 relative overflow-hidden transition-colors duration-500 ${isLight ? 'bg-[#f8fafc] text-slate-900 selection:bg-[#6aa84f] selection:text-white' : 'bg-[#020617] text-white selection:bg-[#a3e635] selection:text-black'}`}>
-            
-            {/* DYNAMIC BACKGROUND (WAVVA STYLE) */}
-            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className={`absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] animate-mesh ${isLight ? 'bg-[#6aa84f]/20' : 'bg-[#a3e635]/10'}`} />
-                <div className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[150px] animate-mesh ${isLight ? 'bg-[#274e13]/10' : 'bg-[#064e3b]/20'}`} style={{ animationDelay: '-5s' }} />
+        <div className="min-h-screen bg-[#f7f8fa] font-sans overflow-x-hidden">
+            {/* Top Bar Navigation */}
+            <div className="w-full h-16 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-6 md:px-10 fixed top-0 z-40">
+                <div className="flex items-center gap-2">
+                    <img src="/logo.png" className="h-8 w-auto" alt="Djapero Logo" />
+                    <span className="font-black uppercase tracking-tighter text-slate-900 hidden sm:block">Djapero Dashboard</span>
+                </div>
+                <div className="flex items-center gap-4">
+                    <button className="p-2 text-slate-400 hover:text-slate-900 transition-colors">
+                        <Search size={20} />
+                    </button>
+                    <button className="p-2 text-slate-400 hover:text-slate-900 transition-colors relative">
+                        <Bell size={20} />
+                        <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+                    </button>
+                    <button 
+                        onClick={() => navigate("/admin")}
+                        className="p-2 text-slate-400 hover:text-[#a3e635] transition-colors"
+                    >
+                        <SettingsIcon size={20} />
+                    </button>
+                </div>
             </div>
 
-            {/* DASHBOARD HEADER */}
-            <header className="relative pt-32 pb-20 px-6 md:px-12">
-                <div className={`absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b pointer-events-none ${isLight ? 'from-[#6aa84f]/10 to-transparent' : 'from-[#a3e635]/5 to-transparent'}`} />
-                <div className={`absolute top-20 right-20 w-64 h-64 rounded-full blur-[100px] animate-pulse ${isLight ? 'bg-[#6aa84f]/20' : 'bg-[#a3e635]/10'}`} />
-
-                <div className="max-w-[1400px] mx-auto relative z-10">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
-                        <motion.div
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                        >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className={`px-3 py-1 border rounded-full ${isLight ? 'bg-[#6aa84f]/10 border-[#6aa84f]/30' : 'bg-[#a3e635]/10 border-[#a3e635]/20'}`}>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}`}>Espace Membre</span>
-                                </div>
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-500' : 'text-white/20'}`}>Connecté en tant que {profile?.fullName || user.email}</span>
+            <main className="w-full pt-28 pb-20 px-4 md:px-10 max-w-7xl mx-auto">
+                {/* Hero Header Section */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-12">
+                    <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="max-w-2xl"
+                    >
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-xl shadow-slate-200">
+                                <img src="/logo.png" alt="Djapero" className="w-full h-auto" />
                             </div>
-                            <h1 className="text-5xl md:text-7xl font-[1000] uppercase tracking-tighter leading-none">
-                                HELLO, <br/>
-                                <span className={isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}>{profile?.fullName?.split(' ')[0] || "UTILISATEUR"}</span>
-                            </h1>
+                            <div className="flex flex-col">
+                                <span className="text-[#a3e635] text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1">Espace Membre</span>
+                                <span className="text-slate-900 text-[11px] font-black uppercase tracking-tighter">Tableau de bord</span>
+                            </div>
+                        </div>
+                        <h2 className="text-5xl md:text-7xl font-black tracking-tighter text-[#0f172a] uppercase leading-none">
+                            Salut, <span className="text-[#a3e635]">{profile?.fullName?.split(' ')[0] || user?.email?.split('@')[0]}</span>
+                        </h2>
+                        
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.5 }}
+                            className="mt-6"
+                        >
+                            <button 
+                                onClick={() => navigate("/bienvenue")}
+                                className="flex items-center gap-4 bg-white border border-slate-200 text-slate-800 font-black px-8 py-5 rounded-[24px] hover:bg-slate-50 active:scale-95 transition-all shadow-xl shadow-slate-200/50 text-sm uppercase tracking-[0.1em] group"
+                            >
+                                <Sparkles size={22} className="text-[#a3e635] group-hover:scale-125 transition-transform" />
+                                Revoir l'accueil Djapero
+                            </button>
                         </motion.div>
 
-                        <div className={`grid grid-cols-3 gap-4 md:gap-8 backdrop-blur-xl border p-6 md:p-8 rounded-[2.5rem] shadow-xl ${isLight ? 'bg-white border-slate-200' : 'bg-white/5 border-white/10'}`}>
-                            {stats.map((stat, i) => (
-                                <div key={i} className="text-center md:text-left">
-                                    <div className="flex items-center gap-2 mb-2 justify-center md:justify-start">
-                                        <stat.icon size={14} className={isLight ? 'text-[#6aa84f]' : stat.color} />
-                                        <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-slate-400' : 'text-white/30'}`}>{stat.label}</span>
-                                    </div>
-                                    <p className={`text-xl md:text-2xl font-[1000] uppercase tracking-tighter ${isLight ? 'text-slate-900' : 'text-white'}`}>{stat.value}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* ACTIONS QUICK ACCESS */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        {[
-                            { name: "Marketplace", icon: Store, path: "/marché", color: isLight ? "bg-[#6aa84f] text-white shadow-lg" : "bg-[#a3e635] text-black" },
-                            { name: "Catalogue", icon: ShoppingBag, path: "/produits", color: isLight ? "bg-white border-black/10 text-black shadow-sm" : "bg-white/5 border-white/10 text-white" },
-                            { name: "Services", icon: Briefcase, path: "/services", color: isLight ? "bg-white border-black/10 text-black shadow-sm" : "bg-white/5 border-white/10 text-white" },
-                            { name: "Livraison", icon: Truck, path: "/livraison", color: isLight ? "bg-white border-black/10 text-black shadow-sm" : "bg-white/5 border-white/10 text-white" },
-                        ].map((action, i) => (
-                            <motion.button
-                                key={i}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.1 }}
-                                onClick={() => navigate(action.path)}
-                                className={`flex flex-col items-center justify-center p-8 rounded-[3rem] transition-all group ${action.color} border hover:scale-105 active:scale-95`}
-                            >
-                                <action.icon size={32} className={`mb-4 group-hover:scale-110 transition-transform ${isLight && action.name !== 'Marketplace' ? 'text-black' : ''}`} />
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${isLight && action.name !== "Marketplace" ? "text-black/60" : ""}`}>{action.name}</span>
-                            </motion.button>
-                        ))}
-                    </div>
+                        <p className="mt-8 text-slate-500 font-medium text-lg leading-relaxed max-w-xl">
+                            Ravi de vous revoir. Votre écosystème Djapero est synchronisé et prêt à l'emploi. 
+                            Explorez vos services ci-dessous.
+                        </p>
+                    </motion.div>
                 </div>
-            </header>
 
-            <div className="max-w-[1400px] mx-auto px-6 md:px-12 space-y-32">
-                {/* EXPLORE SECTION */}
-                <section className={`relative p-8 md:p-16 border rounded-[4rem] md:rounded-[6rem] backdrop-blur-3xl overflow-hidden group/section transition-colors duration-500 shadow-2xl ${isLight ? 'bg-white/40 border-slate-200' : 'bg-white/[0.02] border-white/5'}`}>
-                    <div className={`absolute top-0 right-0 w-96 h-96 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 ${isLight ? 'bg-[#6aa84f]/10' : 'bg-[#a3e635]/5'}`} />
-                    <div className={`absolute bottom-0 left-0 w-64 h-64 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 ${isLight ? 'bg-emerald-500/10' : 'bg-emerald-500/5'}`} />
-                    
-                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end mb-16 gap-8">
-                        <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className={`w-12 h-1 rounded-full ${isLight ? 'bg-[#6aa84f]' : 'bg-[#a3e635]'}`} />
-                                <span className={`text-[10px] font-black uppercase tracking-[0.4em] ${isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}`}>Marché Djapero</span>
+                {/* Main Bento Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 h-full">
+                    {/* Big Stats / Welcome Banner */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="lg:col-span-4 bg-[#0f172a] rounded-[40px] p-8 md:p-12 text-white relative overflow-hidden group shadow-2xl shadow-indigo-200/50 min-h-[300px] flex flex-col justify-between"
+                    >
+                        <div className="relative z-10">
+                            <div className="w-12 h-12 bg-[#a3e635] rounded-2xl flex items-center justify-center text-[#0f172a] mb-8 shadow-lg shadow-[#a3e635]/20">
+                                <LayoutDashboard size={24} strokeWidth={2.5} />
                             </div>
-                            <h3 className={`text-4xl md:text-6xl font-[1000] uppercase tracking-tighter leading-none mb-4 ${isLight ? 'text-slate-900' : ''}`}>Sélection <span className={isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}>Premium</span></h3>
-                            <p className={`text-base font-bold uppercase tracking-widest text-[10px] ${isLight ? 'text-slate-500' : 'text-white/40'}`}>Découvrez nos arrivages hebdomadaires certifiés qualité.</p>
+                            <h3 className="text-3xl md:text-5xl font-black uppercase tracking-tighter leading-tight mb-4">
+                                Performance <br /><span className="text-[#a3e635]">Djapero Group</span>
+                            </h3>
+                            <p className="text-slate-400 max-w-sm text-sm md:text-base font-medium">
+                                Visualisez l'état global de vos opérations et accédez à vos outils privilégiés en un clic.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-8 relative z-10 pt-8 border-t border-white/5">
+                            <div>
+                                <div className="text-3xl font-black text-[#a3e635]">{data.products?.length || 0}</div>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">Produits</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-black text-white">{data.services?.length || 0}</div>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">Établissements</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-black text-white">2.4k</div>
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">Visites</div>
+                            </div>
+                        </div>
+
+                        {/* Background Visual Elements */}
+                        <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-[#a3e635]/10 to-transparent pointer-events-none" />
+                        <div className="absolute bottom-0 right-0 p-8 opacity-20 group-hover:scale-110 transition-transform duration-1000">
+                             <img src="/logo.png" className="w-48 grayscale invert" alt="" />
+                        </div>
+                    </motion.div>
+
+                    {/* Compact Action Items */}
+                    {navItems.map((item, idx) => (
+                        <motion.div
+                            key={item.name}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 + idx * 0.1 }}
+                            className={`${idx < 2 ? 'lg:col-span-2' : 'lg:col-span-3'} group rounded-[32px] bg-white border border-white shadow-sm hover:shadow-xl hover:border-[#a3e635]/20 transition-all duration-500 cursor-pointer overflow-hidden p-8 flex flex-col justify-between`}
+                            onClick={() => navigate(item.path)}
+                        >
+                            <div className="flex items-start justify-between mb-4">
+                                <div className={`p-4 rounded-2xl bg-gradient-to-br ${item.color} text-white shadow-lg`}>
+                                    <item.icon size={24} />
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:translate-x-0 -translate-x-2 transition-all duration-300">
+                                    <ArrowRight size={18} className="text-slate-900" />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <h4 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{item.name}</h4>
+                                    {item.count !== undefined && (
+                                        <span className="text-xs font-bold text-[#a3e635] bg-[#a3e635]/10 px-2 py-0.5 rounded-full">{item.count}</span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-400 font-medium leading-relaxed">{item.desc}</p>
+                            </div>
+                        </motion.div>
+                    ))}
+
+                    {/* Quick Setting Card */}
+                    {isAdmin && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.8 }}
+                            className="lg:col-span-3 bg-slate-900 rounded-[32px] p-8 text-white flex items-center justify-between group cursor-pointer hover:bg-black transition-colors"
+                            onClick={() => navigate("/admin")}
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full border border-white/20 flex items-center justify-center group-hover:rotate-90 transition-transform duration-500">
+                                    <SettingsIcon size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="font-black uppercase tracking-tighter">Configuration</h4>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Paramètres Système</p>
+                                </div>
+                            </div>
+                            <ArrowRight size={20} className="text-slate-600 group-hover:text-[#a3e635] transition-colors" />
+                        </motion.div>
+                    )}
+
+                    {/* User profile at the bottom */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 1 }}
+                        className="lg:col-span-6 bg-white border border-slate-100 rounded-[32px] p-6 flex items-center justify-between mt-4"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-full border-4 border-[#a3e635]/10 overflow-hidden bg-slate-50 shadow-inner">
+                                {profile?.avatarUrl ? (
+                                    <img src={profile.avatarUrl} alt="User" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-lg font-black text-slate-400">
+                                        {profile?.fullName?.charAt(0) || user?.email?.charAt(0)}
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <h4 className="text-lg font-black text-slate-900 uppercase tracking-tighter leading-none mb-1">
+                                    {profile?.fullName || user?.email?.split('@')[0]}
+                                </h4>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Compte actif • {user?.email}</p>
+                            </div>
                         </div>
                         <button 
-                            onClick={() => navigate("/produits")} 
-                            className={`group/btn relative px-10 py-4 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-lg ${isLight ? 'bg-white border border-slate-200' : 'bg-white'}`}
+                            onClick={() => navigate("/auth")}
+                            className="px-6 py-3 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors border border-slate-100"
                         >
-                            <span className="relative z-10">Tout explorer</span>
-                            <div className={`absolute inset-0 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 ${isLight ? 'bg-[#6aa84f]' : 'bg-[#a3e635]'}`} />
+                            Gérer le compte
                         </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 relative z-10">
-                        {products.length > 0 ? products.slice(0, 3).map((product: any, idx: number) => (
-                            <motion.div 
-                                key={product.id}
-                                whileHover={{ y: -10 }}
-                                className={`group cursor-pointer border rounded-[3rem] p-6 transition-all relative flex flex-col shadow-2xl ${isLight ? 'bg-white border-slate-200 hover:bg-slate-50 hover:shadow-[0_40px_80px_rgba(0,0,0,0.1)]' : 'bg-[#0f172a] border-white/5 hover:bg-[#131d33] hover:shadow-[0_40px_80px_rgba(0,0,0,0.5)]'}`}
-                                onClick={() => setSelectedProduct(product)}
-                            >
-                                <div className="relative aspect-square rounded-[2.5rem] overflow-hidden mb-8">
-                                    <img 
-                                        src={product.imageUrl || "https://images.unsplash.com/photo-1550989460-0adf9ea622e2"} 
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                                        alt={product.name}
-                                    />
-                                    <div className={`absolute top-4 right-4 px-4 py-1.5 rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg ${isLight ? 'bg-[#6aa84f] text-white' : 'bg-[#a3e635] text-black'}`}>
-                                        NOUVEAU
-                                    </div>
-                                </div>
-                                <div className="px-2 pb-2 flex-grow">
-                                    <div className="flex justify-between items-baseline mb-1">
-                                        <h4 className={`text-2xl font-black uppercase tracking-tighter truncate max-w-[70%] ${isLight ? 'text-slate-900' : 'text-white'}`}>{product.name}</h4>
-                                        <span className={`text-2xl font-black italic tracking-tighter ${isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}`}>{product.price}</span>
-                                    </div>
-                                    <p className={`text-[10px] font-black uppercase tracking-widest mb-8 ${isLight ? 'text-slate-400' : 'text-white/20'}`}>{product.category}</p>
-                                    
-                                    <button className={`w-full py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl ${isLight ? 'bg-slate-900 text-white hover:bg-[#6aa84f]' : 'bg-white text-black hover:bg-[#a3e635]'}`}>
-                                        Détails du Produit
-                                    </button>
-                                </div>
-                            </motion.div>
-                        )) : (
-                            <div className={`col-span-full py-20 text-center rounded-[3rem] border border-dashed font-black uppercase tracking-[0.4em] ${isLight ? 'bg-white border-slate-300 text-slate-400' : 'bg-white/5 border-white/10 text-white/20'}`}>
-                                Chargement des exclusivités...
-                            </div>
-                        )}
-                    </div>
-                </section>
-
-                {/* BOTTOM CTA */}
-                <section className={`rounded-[4rem] p-12 md:p-24 overflow-hidden relative group transition-colors duration-500 shadow-2xl ${isLight ? 'bg-[#6aa84f] text-white' : 'bg-[#a3e635] text-black'}`}>
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-white/20 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-1000" />
-                    <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-12">
-                        <div className="max-w-xl text-center md:text-left">
-                            <h2 className="text-4xl md:text-6xl font-[1000] uppercase tracking-tighter leading-[0.9] mb-6">Besoin d'un service <br/> sur-mesure ?</h2>
-                            <p className={`text-lg font-bold ${isLight ? 'text-white/80' : 'text-black/60'}`}>Contactez notre équipe d'experts pour vos projets agricoles ou de communication.</p>
-                        </div>
-                        <button className={`px-16 py-8 rounded-3xl font-[1000] uppercase tracking-widest text-sm shadow-2xl hover:scale-105 active:scale-95 transition-all ${isLight ? 'bg-white text-[#274e13]' : 'bg-black text-white'}`}>
-                            Démarrer un projet
-                        </button>
-                    </div>
-                </section>
-            </div>
-
-            {/* PRODUCT MODAL */}
-            <AnimatePresence>
-                {selectedProduct && (
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className={`fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-3xl ${isLight ? 'bg-white/80' : 'bg-black/90'}`}
-                    >
-                        <motion.div 
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            className={`w-full max-w-4xl rounded-[4rem] overflow-hidden border shadow-2xl flex flex-col md:flex-row ${isLight ? 'bg-white border-slate-200 shadow-[0_50px_100px_rgba(0,0,0,0.1)]' : 'bg-[#0f172a] border-white/5 shadow-[0_50px_100px_rgba(0,0,0,0.5)]'}`}
-                        >
-                            <div className={`w-full md:w-1/2 flex items-center justify-center border-r overflow-hidden ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/5'}`}>
-                                <img src={selectedProduct.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={selectedProduct.name} />
-                            </div>
-                            <div className="w-full md:w-1/2 p-12 relative flex flex-col">
-                                <button onClick={() => setSelectedProduct(null)} className={`absolute top-8 right-8 transition-colors ${isLight ? 'text-slate-400 hover:text-slate-900' : 'text-white/40 hover:text-white'}`}>
-                                    <X size={24} />
-                                </button>
-                                <div className="mb-10">
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}`}>{selectedProduct.category}</span>
-                                    <h2 className={`text-5xl font-[1000] uppercase tracking-tighter mt-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>{selectedProduct.name}</h2>
-                                    <p className={`text-3xl font-black mt-4 ${isLight ? 'text-[#6aa84f]' : 'text-[#a3e635]'}`}>{selectedProduct.price}</p>
-                                </div>
-                                <p className={`text-sm leading-relaxed mb-10 ${isLight ? 'text-slate-500' : 'text-white/40'}`}>{selectedProduct.description || "Un produit d'excellence sélectionné avec soin par Djapero Group pour garantir une fraîcheur et une qualité inégalées."}</p>
-                                <a 
-                                    href={`https://wa.me/${data?.settings?.whatsapp || ''}?text=Bonjour Djapero, je souhaite commander : ${selectedProduct.name}`}
-                                    className={`mt-auto w-full py-6 rounded-2xl font-black uppercase tracking-widest text-center hover:scale-[1.02] active:scale-[0.98] transition-all ${isLight ? 'bg-[#6aa84f] text-white shadow-lg shadow-[#6aa84f]/20' : 'bg-[#a3e635] text-black'}`}
-                                >
-                                    Commander sur WhatsApp
-                                </a>
-                            </div>
-                        </motion.div>
                     </motion.div>
-                )}
-            </AnimatePresence>
+                </div>
+            </main>
         </div>
     );
 }
-
-function X({ size }: { size: number }) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-    );
-}
-

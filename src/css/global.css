@@ -47,29 +47,29 @@ body {
     transition: padding-left 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-body.sidebar-hidden .main-wrapper {
-    padding-left: 0;
-}
-
 @media (max-width: 1024px) {
     .main-wrapper {
-        padding-left: 0 !important;
+        padding-left: 100px;
     }
+}
+
+body.sidebar-hidden .main-wrapper {
+    padding-left: 0 !important;
 }
 
 /* Sidebar Styles matching the screenshot (Floating Pill) */
 .sidebar {
-    width: 80px;
-    background: #ffffff;
-    color: #1e293b;
+    width: 70px;
+    background: var(--background-theme, #ffffff);
+    color: var(--text-theme, #1e293b);
     height: auto;
     max-height: 98vh;
     position: fixed;
-    left: 32px;
+    left: 12px;
     top: 20px;
     bottom: 20px;
     padding: 24px 0;
-    display: none;
+    display: flex;
     flex-direction: column;
     align-items: center;
     z-index: 1000;
@@ -78,17 +78,10 @@ body.sidebar-hidden .main-wrapper {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     box-shadow: 0 40px 100px rgba(0,0,0,0.1);
-    border: 1px solid rgba(0,0,0,0.1);
+    border: 1px solid var(--border-theme, rgba(0,0,0,0.1));
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-width: none;
-}
-
-html.dark .sidebar {
-    background: #020617;
-    color: white;
-    box-shadow: 0 40px 100px rgba(0,0,0,0.6);
-    border: 1px solid rgba(255,255,255,0.1);
 }
 
 .sidebar::-webkit-scrollbar {
@@ -97,13 +90,13 @@ html.dark .sidebar {
 
 @media (min-width: 1024px) {
     .sidebar {
-        display: flex; /* Show only on large screens */
+        width: 80px;
+        left: 32px;
     }
 }
 
 /* Ensure mobile sidebar (when open via JS) is visible */
-.lg\:hidden + .sidebar,
-aside.sidebar[style*="transform: none"] {
+.mobile-sidebar-active {
     display: flex !important;
 }
 
@@ -219,9 +212,10 @@ aside.sidebar[style*="transform: none"] {
 
 /* Footer Styles */
 .footer {
-    background-color: white;
+    background-color: var(--background-theme, white);
     padding: 60px 0 30px;
-    border-top: 1px solid rgba(0,0,0,0.05);
+    border-top: 1px solid var(--border-theme, rgba(0,0,0,0.05));
+    transition: all 0.5s ease;
 }
 
 .footer .container {
@@ -314,7 +308,7 @@ aside.sidebar[style*="transform: none"] {
 }
 
 @utility admin-input-refined {
-    @apply w-full bg-[#f8fafc] border border-[#e2e8f0] px-7 py-4 rounded-2xl text-[#0f172a] outline-none focus:border-emerald-500 focus:bg-white transition-all font-bold shadow-sm placeholder:text-gray-300 min-h-[64px] flex items-center;
+    @apply w-full bg-[#f8fafc] border border-[#e2e8f0] px-4 md:px-7 py-4 rounded-2xl text-[#0f172a] outline-none focus:border-emerald-500 focus:bg-white transition-all font-bold shadow-sm placeholder:text-gray-300 min-h-[64px] flex items-center;
 }
 
 @utility admin-input-icon-wrapper {
@@ -327,6 +321,43 @@ aside.sidebar[style*="transform: none"] {
 
 @utility admin-input-icon {
     @apply absolute left-6 top-1/2 -translate-y-1/2 pointer-events-none transition-colors z-10;
+}
+
+/* Theme overrides */
+html.dark {
+    --background-theme: #020617;
+    --text-theme: #f8fafc;
+    --border-theme: rgba(255, 255, 255, 0.1);
+    --social-bg: rgba(255, 255, 255, 0.05);
+    --social-text: #f8fafc;
+}
+
+html.green {
+    --background-theme: #1b4332; /* Leaf Green - Dark Forest */
+    --text-theme: #f8fafc;
+    --border-theme: rgba(255, 255, 255, 0.1);
+    --social-bg: rgba(255, 255, 255, 0.05);
+    --social-text: #f8fafc;
+}
+
+html.dark body, html.green body {
+    background-color: var(--background-theme);
+    color: var(--text-theme);
+}
+
+html.dark .footer-brand h2,
+html.green .footer-brand h2,
+html.dark .footer-links a,
+html.green .footer-links a,
+html.dark .footer-socials a,
+html.green .footer-socials a {
+    color: white;
+}
+
+html.dark .footer-socials a,
+html.green .footer-socials a {
+    background-color: var(--social-bg);
+    color: var(--social-text);
 }
 
 @media (max-width: 768px) {

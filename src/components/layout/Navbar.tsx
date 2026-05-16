@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { 
-    Menu, X, ShoppingBag, Truck, Briefcase, 
+    ShoppingBag, Truck, Briefcase, 
     Users, Phone, LayoutDashboard, Settings, User, LogOut,
     Plus, ChevronLeft, Store, Bell, ShieldCheck,
     Sun, Moon, PlaySquare
@@ -13,14 +13,18 @@ import { useData } from "../../hooks/useData";
 import Logo from "./Logo";
 
 export default function Sidebar() {
-    const [isMobileOpen, setIsMobileOpen] = useState(false);
-    const [isVisible, setIsVisible] = useState(true);
+    const [isVisible, setIsVisible] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return window.innerWidth >= 1024;
+        }
+        return true;
+    });
     const [showNotifs, setShowNotifs] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout, isAdmin } = useAuth();
     const { data } = useData();
-    const { theme, toggleTheme } = useTheme();
+    const { theme, setTheme } = useTheme();
 
     const notifications = data?.notifications || [];
 
@@ -44,85 +48,90 @@ export default function Sidebar() {
         { name: "Administration", path: "/admin", icon: ShieldCheck, adminOnly: true },
     ];
 
-    const SidebarContent = () => (
-        <div className="flex flex-col min-h-full w-full items-center py-0 px-0">
-            <div className="sidebar-logo mb-6 shrink-0 relative pt-8">
-                <Link to="/accueil" className="transition-transform hover:scale-105 active:scale-95">
-                    <Logo size={64} className="rounded-3xl" />
-                </Link>
-            </div>
+    const SidebarContent = ({ showText = false }: { showText?: boolean }) => (
+        <div className={`flex flex-col items-center justify-start py-6 rounded-[32px] w-16 bg-transparent border-0 shadow-none ${showText ? 'w-full px-4' : ''}`}>
             
-            <button 
-                onClick={toggleTheme}
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-8 border transition-all hover:scale-105 active:scale-95 ${theme === 'light' ? 'bg-black/5 border-black/10 text-black/60 hover:bg-black/10 hover:text-black' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'}`}
-                title={theme === 'light' ? "Passer en mode sombre" : "Passer en mode clair"}
-            >
-                {theme === 'light' ? <Moon size={22} className="text-[#6aa84f]" /> : <Sun size={22} className="text-[#a3e635]" />}
-            </button>
+            {/* User Profile in Sidebar */}
+            <div className={`flex flex-col items-center mb-4`}>
+                <div className={`rounded-full border overflow-hidden ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>
+                    {user?.photoURL ? (
+                        <img src={user.photoURL} alt="" className="w-10 h-10 object-cover" />
+                    ) : (
+                        <div className={`w-10 h-10 flex items-center justify-center ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-100'}`}>
+                            <User className={theme === 'dark' ? 'text-white/40' : 'text-slate-400'} size={20} />
+                        </div>
+                    )}
+                </div>
+            </div>
 
-            <nav className="flex flex-col items-center gap-3 w-full shrink-0">
+            {/* Nav Links */}
+            <nav className={`flex flex-col items-center gap-3 w-full shrink-0`}>
                 {navLinks.filter(l => !l.adminOnly).map((link) => {
                     const isActive = location.pathname === link.path;
+                    const isDarkish = theme === 'dark' || theme === 'green';
                     return (
                         <Link
                             key={link.path}
                             to={link.path}
-                            className={`group flex items-center justify-center w-14 h-14 rounded-[20px] transition-all relative ${isActive ? (theme === 'light' ? "bg-[#6aa84f]/15 text-[#6aa84f]" : "bg-[#a3e635]/15 text-[#a3e635]") : (theme === 'light' ? "text-slate-500 hover:text-slate-900 hover:bg-black/5" : "text-white/40 hover:text-white hover:bg-white/5")}`}
-                            onClick={() => setIsMobileOpen(false)}
+                            className={`group flex items-center justify-center w-12 h-12 rounded-full transition-all relative ${isActive ? (isDarkish ? "bg-emerald-900/30 text-emerald-400 font-bold" : "bg-emerald-100 text-emerald-700 font-bold") : (isDarkish ? "text-white/60 hover:bg-white/5" : "text-slate-500 hover:bg-black/5")}`}
                             title={link.name}
                         >
-                            {isActive && (
-                                <div className={`absolute left-[-16px] top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-md ${theme === 'light' ? 'bg-[#6aa84f]' : 'bg-[#a3e635]'}`} />
-                            )}
-                            <link.icon size={28} />
+                            <link.icon size={22} />
                         </Link>
                     );
                 })}
 
                 {isAdmin && (
-                    <div className={`w-10 h-px my-3 shrink-0 ${theme === 'light' ? 'bg-black/10' : 'bg-white/10'}`} />
+                    <div className={`h-px shrink-0 w-8 my-2 ${theme === 'dark' || theme === 'green' ? 'bg-white/5' : 'bg-black/5'}`} />
                 )}
 
                 {isAdmin && navLinks.filter(l => l.adminOnly).map((link) => {
                     const isActive = location.pathname === link.path;
+                    const isDarkish = theme === 'dark' || theme === 'green';
                     return (
                         <Link
                             key={link.path}
                             to={link.path}
-                            className={`group flex items-center justify-center w-14 h-14 rounded-[20px] transition-all relative border border-green-500/10 hover:bg-green-500/5 ${isActive ? (theme === 'light' ? "bg-green-500/20 text-[#6aa84f]" : "bg-green-500/20 text-[#a3e635]") : (theme === 'light' ? "text-green-600/40 hover:text-green-600" : "text-green-400/40 hover:text-green-400")}`}
-                            onClick={() => setIsMobileOpen(false)}
+                            className={`group flex items-center justify-center w-12 h-12 rounded-full transition-all relative ${isActive ? (isDarkish ? "bg-emerald-900/30 text-emerald-400" : "bg-emerald-100 text-emerald-700") : (isDarkish ? "text-white/60 hover:bg-white/5" : "text-slate-500 hover:bg-black/5")}`}
                             title={link.name}
                         >
-                            {isActive && (
-                                <div className={`absolute left-[-16px] top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-md ${theme === 'light' ? 'bg-[#6aa84f]' : 'bg-[#a3e635]'}`} />
-                            )}
-                            <link.icon size={28} />
+                            <link.icon size={22} />
                         </Link>
                     );
                 })}
             </nav>
 
-            <div className="mt-auto pt-10 pb-4 flex flex-col items-center gap-6 shrink-0">
-                {user && (
-                    <div className={`w-12 h-12 rounded-full border overflow-hidden ring-4 ${theme === 'light' ? 'border-black/20 ring-black/5' : 'border-white/20 ring-white/5'}`}>
-                        {user.photoURL ? (
-                            <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                            <div className={`w-full h-full flex items-center justify-center ${theme === 'light' ? 'bg-black/10' : 'bg-white/10'}`}>
-                                <User className={theme === 'light' ? 'text-black/40' : 'text-white/40'} size={24} />
-                            </div>
-                        )}
-                    </div>
-                )}
+            <div className="mt-auto pt-6 flex flex-col items-center gap-3 shrink-0">
+                {/* Theme Switcher Dots */}
+                <div className={`flex flex-col gap-2 p-2 rounded-full ${theme === 'dark' || theme === 'green' ? 'bg-white/5' : 'bg-slate-50'}`}>
+                    <button 
+                        onClick={() => setTheme('light')}
+                        className={`w-4 h-4 rounded-full border border-slate-200 bg-white transition-all ${theme === 'light' ? 'scale-125 ring-2 ring-emerald-500 ring-offset-2 ring-offset-transparent' : 'opacity-60 hover:opacity-100'}`}
+                        title="Thème Clair"
+                    />
+                    <button 
+                        onClick={() => setTheme('dark')}
+                        className={`w-4 h-4 rounded-full border border-slate-700 bg-[#020617] transition-all ${theme === 'dark' ? 'scale-125 ring-2 ring-emerald-500 ring-offset-2 ring-offset-transparent' : 'opacity-60 hover:opacity-100'}`}
+                        title="Thème Sombre"
+                    />
+                    <button 
+                        onClick={() => setTheme('green')}
+                        className={`w-4 h-4 rounded-full border border-emerald-600 bg-[#1b4332] transition-all ${theme === 'green' ? 'scale-125 ring-2 ring-emerald-400 ring-offset-2 ring-offset-transparent' : 'opacity-60 hover:opacity-100'}`}
+                        title="Thème Vert Feuille"
+                    />
+                </div>
+
+                <div className={`h-px w-8 ${theme === 'dark' || theme === 'green' ? 'bg-white/5' : 'bg-black/5'}`} />
+
                 <button 
                     onClick={async () => {
                         await logout();
                         navigate("/auth");
                     }}
-                    className="flex items-center justify-center w-14 h-14 rounded-[20px] transition-all relative text-red-500/50 hover:text-red-500 hover:bg-red-500/5"
+                    className={`flex items-center justify-center w-10 h-10 rounded-full transition-all text-red-500 hover:bg-red-50`}
                     title="Déconnexion"
                 >
-                    <LogOut size={28} />
+                    <LogOut size={20} />
                 </button>
             </div>
         </div>
@@ -130,10 +139,10 @@ export default function Sidebar() {
 
     return (
         <>
-            {/* Desktop Toggle Button */}
+            {/* Desktop and Mobile Toggle Button */}
             <button 
                 onClick={() => setIsVisible(!isVisible)}
-                className={`hidden lg:flex fixed top-8 ${isVisible ? 'left-[104px]' : 'left-8'} z-[1100] w-12 h-12 rounded-2xl items-center justify-center transition-all duration-500 shadow-2xl group ${theme === 'light' ? 'bg-white border border-slate-200 text-slate-800 hover:bg-[#6aa84f] hover:text-white hover:border-[#6aa84f]' : 'bg-[#020617] border border-white/10 text-white hover:bg-[#a3e635] hover:text-black hover:shadow-[0_0_30px_rgba(163,230,53,0.3)]'}`}
+                className={`flex fixed bottom-8 lg:bottom-auto lg:top-8 ${isVisible ? 'left-[90px] lg:left-[104px]' : 'left-8'} z-[1100] w-12 h-12 rounded-full lg:rounded-2xl items-center justify-center transition-all duration-500 shadow-2xl group ${theme === 'dark' || theme === 'green' ? 'bg-black/80 backdrop-blur-md border border-white/10 text-white hover:bg-emerald-500 hover:text-white' : 'bg-white border border-slate-200 text-slate-800 hover:bg-emerald-500 hover:text-white hover:border-emerald-500'}`}
                 title={isVisible ? "Masquer le menu" : "Afficher le menu"}
             >
                 <div className="relative">
@@ -146,7 +155,7 @@ export default function Sidebar() {
                                 exit={{ opacity: 0, rotate: 90, scale: 0.5 }}
                                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
                             >
-                                <ChevronLeft size={22} className="group-hover:-translate-x-0.5 transition-transform" />
+                                <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
                             </motion.div>
                         ) : (
                             <motion.div
@@ -163,7 +172,7 @@ export default function Sidebar() {
                 </div>
             </button>
 
-            {/* Desktop Sidebar */}
+            {/* Application Sidebar */}
             <motion.aside 
                 layout
                 initial={false}
@@ -177,50 +186,6 @@ export default function Sidebar() {
             >
                 <SidebarContent />
             </motion.aside>
-
-            {/* Mobile Header */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 h-20 bg-[#020617] shadow-sm border-b border-white/5 flex items-center justify-between px-6 z-50">
-                <Link to="/accueil" className="text-xl font-[1000] text-white flex items-center gap-4 tracking-tighter uppercase">
-                    <Logo size={48} className="rounded-2xl" />
-                    Djapero
-                </Link>
-                <button 
-                    onClick={() => setIsMobileOpen(true)}
-                    className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl shadow-sm border border-emerald-100/50 active:scale-95 transition-transform"
-                >
-                    <Menu size={24} />
-                </button>
-            </div>
-
-            {/* Mobile Sidebar Overlay */}
-            <AnimatePresence>
-                {isMobileOpen && (
-                    <>
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/60 z-[1000]"
-                            onClick={() => setIsMobileOpen(false)}
-                        />
-                        <motion.aside 
-                            initial={{ x: "-100%" }}
-                            animate={{ x: 0 }}
-                            exit={{ x: "-100%" }}
-                            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                            className="sidebar fixed top-0 left-0 h-full w-[280px] z-[1001] antialiased"
-                        >
-                            <button 
-                                onClick={() => setIsMobileOpen(false)}
-                                className="absolute top-6 right-6 text-white/50 hover:text-white"
-                            >
-                                <X size={24} />
-                            </button>
-                            <SidebarContent />
-                        </motion.aside>
-                    </>
-                )}
-            </AnimatePresence>
         </>
     );
 }

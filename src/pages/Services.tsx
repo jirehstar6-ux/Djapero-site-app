@@ -22,7 +22,7 @@ export default function Services() {
 
     return (
         <div className="pt-20">
-            <section className="services-hero py-20 bg-emerald-900 text-white text-center rounded-b-[3rem]">
+            <section className="services-hero py-20 bg-emerald-900 text-white text-center rounded-b-3xl">
                 <div className="container mx-auto px-6">
                     <h1 className="text-5xl font-black mb-6">Expertise & <span className="text-yellow-400">Créativité</span></h1>
                     <p className="text-xl max-w-2xl mx-auto opacity-90">Nous transformons vos idées en visuels percutants et innovants. De la conception au print, Djapero vous accompagne.</p>
@@ -41,16 +41,16 @@ export default function Services() {
                         <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px] mt-4">Des solutions sur-mesure pour votre business</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-10">
+                    <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-10">
                         {expertises.map((s, i) => (
                             <motion.div 
                                 key={s.id}
                                 initial={{ opacity: 0, y: 20 }}
                                 whileInView={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.1 }}
-                                className="bg-white rounded-[2.5rem] p-6 md:p-10 shadow-xl border border-gray-100 group hover:border-[#10b981]/30 transition-all cursor-pointer flex flex-col h-full"
+                                className="bg-white rounded-3xl p-3 md:p-10 shadow-xl border border-gray-100 group hover:border-[#10b981]/30 transition-all cursor-pointer flex flex-col h-full"
                             >
-                                <div className="h-40 md:h-52 rounded-[2rem] overflow-hidden mb-8 bg-gray-50 flex items-center justify-center relative transition-colors">
+                                <div className="h-28 md:h-52 rounded-xl md:rounded-[2rem] overflow-hidden mb-3 md:mb-8 bg-gray-50 flex items-center justify-center relative transition-colors">
                                     <img 
                                         src={s.imageUrl || "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?auto=format&fit=crop&q=80&w=400"} 
                                         alt={s.name} 
@@ -61,16 +61,16 @@ export default function Services() {
                                     />
                                 </div>
                                 <div className="flex-grow flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#10b981] mb-3 block opacity-70">{s.category}</span>
-                                    <h3 className="text-2xl font-black tracking-tighter text-[#10b981] mb-4 uppercase leading-none group-hover:text-emerald-700 transition-colors">{s.name}</h3>
-                                    <p className="text-gray-500 text-sm leading-relaxed line-clamp-3 mb-8">{s.description || "Un service d’excellence pour propulser votre image de marque au sommet avec Djapero Group."}</p>
+                                    <span className="text-[6px] md:text-[10px] font-black uppercase tracking-widest text-[#10b981] mb-1 md:mb-3 block opacity-70">{s.category}</span>
+                                    <h3 className="text-xs md:text-2xl font-black tracking-tighter text-[#10b981] mb-1 md:mb-4 uppercase leading-none group-hover:text-emerald-700 transition-colors">{s.name}</h3>
+                                    <p className="text-gray-500 text-[8px] md:text-sm leading-relaxed line-clamp-2 md:line-clamp-3 mb-2 md:mb-8">{s.description || "Un service d’excellence pour propulser votre image de marque au sommet avec Djapero Group."}</p>
                                     
-                                    <div className="mt-auto pt-8 border-t border-gray-50 flex justify-between items-center">
-                                        <div className="flex gap-1">
+                                    <div className="mt-auto pt-2 md:pt-8 border-t border-gray-50 flex justify-between items-center">
+                                        <div className="hidden md:flex gap-1">
                                             {[1,2,3,4,5].map(star => <Star key={star} size={12} className="text-yellow-400 fill-yellow-400" />)}
                                         </div>
-                                        <button className="text-[#10b981] font-black uppercase tracking-widest text-[10px] flex items-center gap-2 group-hover:gap-3 transition-all">
-                                            Commander <ArrowRight size={14} />
+                                        <button className="text-[#10b981] font-black uppercase tracking-widest text-[7px] md:text-[10px] flex items-center gap-2 group-hover:gap-3 transition-all">
+                                            Commander <ArrowRight size={10} className="md:w-[14px] md:h-[14px]" />
                                         </button>
                                     </div>
                                 </div>
@@ -103,12 +103,12 @@ export default function Services() {
                                 whileInView={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: i * 0.05 }}
                                 viewport={{ once: true }}
-                                className="group relative aspect-[3/4] rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden bg-white shadow-xl cursor-pointer border border-gray-100 flex items-center justify-center p-4 md:p-6"
+                                className="group relative aspect-[3/4] rounded-3xl overflow-hidden bg-white shadow-xl cursor-pointer border border-gray-100 flex items-center justify-center p-4 md:p-6"
                                 onClick={() => setSelectedReal(i)}
                             >
                                 <div className="absolute inset-0">
                                     <img 
-                                        src={r.imageUrl} 
+                                        src={r.imageUrl || undefined} 
                                         alt={r.title}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
                                     />
@@ -124,13 +124,13 @@ export default function Services() {
             </section>
 
             {/* CTA Section */}
-            <section className="section cta-section py-24 text-center text-white">
-                <div className="container mx-auto px-6 bg-black/70 py-16 rounded-[3rem] border border-white/10 text-center relative z-10">
-                    <h2 className="text-4xl font-black mb-6">Prêt à lancer votre prochain projet ?</h2>
-                    <p className="text-lg max-w-xl mx-auto mb-10 opacity-80">Contactez-nous dès aujourd'hui pour discuter de vos besoins et obtenir un devis personnalisé sous 24h.</p>
+            <section className="section cta-section py-24 text-center">
+                <div className="container mx-auto px-6 bg-emerald-50 py-16 rounded-3xl border border-emerald-100 text-center relative z-10">
+                    <h2 className="text-4xl font-black mb-6 text-gray-900">Prêt à lancer votre prochain projet ?</h2>
+                    <p className="text-lg max-w-xl mx-auto mb-10 text-gray-600">Contactez-nous dès aujourd'hui pour discuter de vos besoins et obtenir un devis personnalisé sous 24h.</p>
                     <div className="flex flex-wrap justify-center gap-6">
-                        <a href="/contact" className="btn-banner yellow px-10 py-4 rounded-full bg-yellow-400 text-black font-bold uppercase text-lg hover:scale-105 transition-transform">Démarrer un projet</a>
-                        <a href={`https://wa.me/${data.settings.whatsapp}`} target="_blank" className="btn-banner green px-10 py-4 rounded-full bg-[#25D366] text-white font-bold uppercase text-lg flex items-center gap-3 hover:scale-105 transition-transform">
+                        <a href="/contact" className="px-10 py-4 rounded-full bg-orange-500 text-white font-bold uppercase text-lg hover:scale-105 transition-transform shadow-xl shadow-orange-500/20 text-center min-w-[240px]">Démarrer un projet</a>
+                        <a href={`https://wa.me/${data.settings.whatsapp}`} target="_blank" className="px-10 py-4 rounded-full bg-[#25D366] text-white font-bold uppercase text-lg flex items-center justify-center gap-3 hover:scale-105 transition-transform shadow-xl shadow-emerald-500/20 min-w-[240px]">
                             <WhatsApp size={24} /> Discuter sur WhatsApp
                         </a>
                     </div>
@@ -141,13 +141,13 @@ export default function Services() {
             {selectedReal !== null && (
                 <div id="pinterest-lightbox" className="tiktok-player-overlay p-4" onClick={() => setSelectedReal(null)}>
                     <motion.div 
-                        className="bg-white rounded-[2rem] overflow-hidden max-w-5xl w-full flex flex-col md:flex-row h-[90vh] md:h-auto"
+                        className="bg-white rounded-3xl overflow-hidden max-w-5xl w-full flex flex-col md:flex-row h-[90vh] md:h-auto"
                         onClick={e => e.stopPropagation()}
                         initial={{ scale: 0.9, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                     >
                         <div className="md:w-3/5 bg-gray-100 flex items-center justify-center overflow-hidden">
-                            <img src={reals[selectedReal].imageUrl} className="max-w-full max-h-full object-contain" alt="Preview"/>
+                            <img src={reals[selectedReal].imageUrl || undefined} className="max-w-full max-h-full object-contain" alt="Preview"/>
                         </div>
                         <div className="md:w-2/5 p-8 flex flex-col h-full">
                             <div className="flex justify-between items-center mb-8">

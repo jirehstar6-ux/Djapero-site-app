@@ -1,2983 +1,1467 @@
-import { useState, useEffect } from "react";
-import { 
-    LayoutDashboard, Box, Video as VideoIcon, Briefcase, Camera as CameraIcon, Settings, ShieldCheck,
-    LogOut, Eye, ShoppingBag, Plus, Edit2, Trash2, Save, X, CloudUpload, Store as StoreIcon, MapPin, Phone, Filter, Bell, Play,
-    Image as ImageIcon, Monitor, Users, User, Mail, Star, Heart, Maximize2, Lock, Megaphone
-} from "lucide-react";
-import { useData, Product, Video, Service, Real, Settings as AppSettings, Notification, MarketItem, UserProfile } from "../hooks/useData";
-import { motion, AnimatePresence } from "motion/react";
-import React from "react";
-import { useAuth } from "../context/AuthContext";
-import Logo from "../components/layout/Logo";
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { LayoutDashboard, ShoppingBag, StoreIcon, VideoIcon, Bell, Settings, Save, Upload, Trash2, Plus, Image as ImageIcon, Users, Mail, Eye, Calendar, MessageSquare, CheckCircle, Clock } from 'lucide-react';
+import { db, auth, storage } from '../lib/firebase';
+import { doc, getDoc, setDoc, collection, onSnapshot, query, orderBy, limit, updateDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useData } from '../hooks/useData';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 
 export default function Admin() {
-    const { 
-        data, 
-        loading: dataLoading, 
-        updateSettings,
-        addProduct,
-        updateProduct,
-        deleteProduct,
-        addVideo,
-        updateVideo,
-        deleteVideo,
-        addService,
-        updateService,
-        deleteService,
-        addMarketItem,
-        updateMarketItem,
-        deleteMarketItem,
-        addNotification,
-        deleteNotification,
-        addReal,
-        updateReal,
-        deleteReal,
-        addAd,
-        updateAd,
-        deleteAd,
-        addHeroBanner,
-        updateHeroBanner,
-        deleteHeroBanner
-    } = useData();
-    const { user, login, logout, isAdmin } = useAuth();
+    const { data: appData, addProduct, deleteProduct, addVideo, deleteVideo, updateSettings, addMarketItem, deleteMarketItem, addTeamMember, deleteTeamMember, updateTeamMember, addAd, deleteAd } = useData();
     const [activeTab, setActiveTab] = useState("accueil");
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
+    
+    // Visitor and Messages data
+    const [visits, setVisits] = useState<any[]>([]);
+    const [messages, setMessages] = useState<any[]>([]);
+    const [stats, setStats] = useState({
+        totalVisits: 0,
+        uniqueVisitors: 0,
+        unreadMessages: 0
+    });
+    const [latestAlert, setLatestAlert] = useState<string | null>(null);
 
-    // Notifications state for local handling
-    const [notifModal, setNotifModal] = useState<any>(null);
-    const [sendingNotif, setSendingNotif] = useState(false);
+    useEffect(() => {
+        const visitsQuery = query(collection(db, "visits"), orderBy("createdAt", "desc"), limit(50));
+        const messagesQuery = query(collection(db, "messages"), orderBy("createdAt", "desc"));
 
-    const handleSendNotification = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            const formData = new FormData(e.target as HTMLFormElement);
-            const newNotif: Omit<Notification, 'id'> = {
-                title: formData.get("title") as string,
-                message: formData.get("message") as string,
-                type: formData.get("type") as any,
-                createdAt: Date.now(),
-                active: true
-            };
+        let firstLoad = true;
 
-            setSendingNotif(true);
-            const success = await addNotification(newNotif);
-            setSendingNotif(false);
-            if (success) {
-                setNotifModal(null);
-                alert("✅ Notification envoyée !");
-            } else {
-                alert("❌ Erreur lors de l'envoi.");
+        const unsubscribeVisits = onSnapshot(visitsQuery, (snapshot) => {
+            const visitData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setVisits(visitData);
+            
+            // Basic stats calculation
+            const unique = new Set(visitData.map((v: any) => v.email || v.userId || v.userAgent)).size;
+            setStats(prev => ({ ...prev, totalVisits: snapshot.size, uniqueVisitors: unique }));
+
+            if (!firstLoad && !snapshot.metadata.hasPendingWrites) {
+                const newVisit = visitData[0] as any;
+                setLatestAlert(`Nouveau visiteur: ${newVisit.email || 'Anonyme'} sur ${newVisit.path}`);
+                setTimeout(() => setLatestAlert(null), 5000);
             }
-        } catch (err: any) {
-            console.error("Notif error:", err);
-            setSendingNotif(false);
-            alert("❌ Erreur lors de l'envoi de la notification.");
+        }, (error) => {
+            handleFirestoreError(auth, error, OperationType.GET, "visits");
+        });
+
+        const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
+            const messageData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+            setMessages(messageData);
+            const unread = messageData.filter((m: any) => !m.isRead).length;
+            
+            setStats(prev => {
+                if (!firstLoad && unread > prev.unreadMessages) {
+                    setLatestAlert(`Nouveau message reçu de ${messageData[0].name}`);
+                    setTimeout(() => setLatestAlert(null), 5000);
+                }
+                return { ...prev, unreadMessages: unread };
+            });
+        }, (error) => {
+            handleFirestoreError(auth, error, OperationType.GET, "messages");
+        });
+
+        firstLoad = false;
+        return () => {
+            unsubscribeVisits();
+            unsubscribeMessages();
+        };
+    }, []);
+
+    const markAsRead = async (messageId: string) => {
+        const path = `messages/${messageId}`;
+        try {
+            await updateDoc(doc(db, "messages", messageId), { isRead: true });
+        } catch (e) {
+            handleFirestoreError(auth, e, OperationType.UPDATE, path);
         }
     };
 
-    const handleDeleteNotification = async (id: string) => {
-        if (!window.confirm("Supprimer cette notification ?")) return;
-        await deleteNotification(id);
+    const deleteMessage = async (messageId: string) => {
+        if (!window.confirm("Supprimer ce message ?")) return;
+        const path = `messages/${messageId}`;
+        try {
+            await deleteDoc(doc(db, "messages", messageId));
+        } catch (e) {
+            handleFirestoreError(auth, e, OperationType.DELETE, path);
+        }
     };
 
-    const handleDeleteMarketItem = async (id: string) => {
-        if (!window.confirm("Supprimer cet article ?")) return;
-        await deleteMarketItem(id);
-    };
-
-    const handleDeleteAd = async (id: string) => {
-        if (!window.confirm("Supprimer cette publicité ?")) return;
-        await deleteAd(id);
-    };
-
-    const handleDeleteHeroBanner = async (id: string) => {
-        if (!window.confirm("Supprimer cette bannière d'accueil ?")) return;
-        await deleteHeroBanner(id);
-    };
-
-    const [videoSrcType, setVideoSrcType] = useState<'youtube' | 'file'>('youtube');
-    const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
-
-    // Modal states
-    const [productModal, setProductModal] = useState<Partial<Product> | null>(null);
-    const [bulkProductModal, setBulkProductModal] = useState<boolean>(false);
-    const [bulkRows, setBulkRows] = useState<any[]>([{ name: "", price: "", category: "Frais", description: "", imageUrl: "" }]);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("Tous");
-    const [videoModal, setVideoModal] = useState<Partial<Video> | null>(null);
-    const [serviceModal, setServiceModal] = useState<Partial<Service> | null>(null);
-    const [realModal, setRealModal] = useState<Partial<Real> | null>(null);
-    const [marketModal, setMarketModal] = useState<Partial<MarketItem> | null>(null);
-    const [adModal, setAdModal] = useState<any>(null);
-    const [heroModal, setHeroModal] = useState<any>(null);
-    const [selectedDetail, setSelectedDetail] = useState<Product | null>(null);
-
-    const [previewUrl, setPreviewUrl] = useState<string>("");
+    // Form states
+    const [adForm, setAdForm] = useState({ title: "", subtitle: "", price: "", imageUrl: "", link: "", active: true });
+    const [productForm, setProductForm] = useState({ name: "", price: "", category: "", imageUrl: "", description: "", badge: "" });
+    const [videoForm, setVideoForm] = useState({ title: "", src: "", caption: "", category: "", thumbnail: "", srcType: 'youtube' as 'youtube' | 'file' | 'facebook' });
+    const [marketForm, setMarketForm] = useState({ name: "", price: "", category: "", imageUrl: "", description: "", location: "", shopName: "" });
+    const [teamForm, setTeamForm] = useState({ name: "", role: "", img: "", phone: "", description: "", prestations: [] as string[] });
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [prestationInput, setPrestationInput] = useState("");
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [accueilSettings, setAccueilSettings] = useState<Partial<AppSettings>>({});
-    const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
 
-    const getYoutubeId = (url: string) => {
-        if (!url) return "";
-        // Handle direct IDs
-        if (url.length === 11 && !url.includes("/") && !url.includes(".")) return url;
-        
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
-        const match = url.match(regExp);
-        return (match && match[2].length === 11) ? match[2] : url;
+    const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        try {
+            const filename = `video_${Date.now()}_${file.name}`;
+            const fileRef = ref(storage, `uploads/${filename}`);
+            await uploadBytes(fileRef, file);
+            const url = await getDownloadURL(fileRef);
+            setVideoForm({ ...videoForm, src: url, srcType: 'file' });
+        } catch (err) {
+            console.error("Upload error:", err);
+            alert("Erreur lors de l'upload de la vidéo.");
+        } finally {
+            setUploading(false);
+        }
     };
 
-    useEffect(() => {
-        setPreviewUrl("");
-    }, [productModal, videoModal, serviceModal, realModal, marketModal, heroModal, adModal]);
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'product' | 'marche' | 'team' | 'welcome' | 'ad' | 'animCat' | 'animMarche' | 'animLiv' | 'animServ' | 'animEquipe') => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-    const handleFileUpload = async (file: File): Promise<string | null> => {
-        return new Promise((resolve) => {
-            setUploading(true);
-            setUploadProgress(0);
-            const formData = new FormData();
-            formData.append("file", file);
-
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", "/api/upload", true);
-
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    setUploadProgress(percent);
-                }
-            };
-
-            xhr.onload = () => {
-                setUploading(false);
-                setUploadProgress(0);
-                if (xhr.status === 200) {
-                    try {
-                        const result = JSON.parse(xhr.responseText);
-                        console.log("Upload Success:", result.url);
-                        resolve(result.url);
-                    } catch (e) {
-                        console.error("Parse error:", e);
-                        resolve(null);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // Max dimensions - larger for welcome banners to preserve quality
+                const MAX_SIZE = type === 'welcome' ? 1200 : 600;
+                if (width > height) {
+                    if (width > MAX_SIZE) {
+                        height *= MAX_SIZE / width;
+                        width = MAX_SIZE;
                     }
                 } else {
-                    console.error("Upload Failed Status:", xhr.status);
-                    try {
-                        const err = JSON.parse(xhr.responseText);
-                        alert(`❌ Erreur: ${err.error}`);
-                    } catch (e) {
-                        alert(`❌ Erreur serveur (${xhr.status}). L'importation n'a pas pu aboutir.`);
+                    if (height > MAX_SIZE) {
+                        width *= MAX_SIZE / height;
+                        height = MAX_SIZE;
                     }
-                    resolve(null);
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+
+                const dataUrl = canvas.toDataURL('image/webp', type === 'welcome' ? 0.8 : 0.7);
+                
+                if (type === 'team') {
+                    setTeamForm(prev => ({ ...prev, img: dataUrl }));
+                    setPreviewImage(dataUrl);
+                } else if (type === 'product') {
+                    setProductForm(prev => ({ ...prev, imageUrl: dataUrl }));
+                } else if (type === 'marche') {
+                    setMarketForm(prev => ({ ...prev, imageUrl: dataUrl }));
+                } else if (type === 'welcome') {
+                    setAccueilSettings(prev => ({ ...prev, welcomeImage: dataUrl }));
+                } else if (type === 'ad') {
+                    setAdForm(prev => ({ ...prev, imageUrl: dataUrl }));
+                } else if (type === 'animCat') {
+                    setAccueilSettings(prev => ({ ...prev, animCatalogImage: dataUrl }));
+                } else if (type === 'animMarche') {
+                    setAccueilSettings(prev => ({ ...prev, animMarketImage: dataUrl }));
+                } else if (type === 'animLiv') {
+                    setAccueilSettings(prev => ({ ...prev, animDeliveryImage: dataUrl }));
+                } else if (type === 'animServ') {
+                    setAccueilSettings(prev => ({ ...prev, animServicesImage: dataUrl }));
+                } else if (type === 'animEquipe') {
+                    setAccueilSettings(prev => ({ ...prev, animTeamImage: dataUrl }));
                 }
             };
-
-            xhr.onerror = () => {
-                console.error("XHR Network Error during importation");
-                alert("❌ Erreur réseau. L'importation a échoué. Vérifiez votre connexion.");
-                setUploading(false);
-                setUploadProgress(0);
-                resolve(null);
-            };
-
-            xhr.onabort = () => {
-                console.warn("Upload aborted");
-                setUploading(false);
-                setUploadProgress(0);
-                resolve(null);
-            };
-
-            xhr.send(formData);
-        });
+            img.src = reader.result as string;
+        };
+        reader.readAsDataURL(file);
     };
 
-    // Sync local settings with data once loaded
+    const [accueilSettings, setAccueilSettings] = useState({ 
+        heroTitle: "", 
+        heroSubtitle: "", 
+        bannerTitle: "", 
+        bannerDesc: "",
+        welcomeTitle: "",
+        welcomeSubtitle: "",
+        welcomeBtnText: "",
+        welcomeBtnLink: "",
+        welcomeBadgeText: "",
+        welcomeBgColor: "",
+        welcomeImage: "",
+        animCatalogImage: "",
+        animMarketImage: "",
+        animDeliveryImage: "",
+        animServicesImage: "",
+        animTeamImage: ""
+    });
+
     useEffect(() => {
-        if (data?.settings && !hasLoadedSettings) {
-            setAccueilSettings(data.settings);
-            setHasLoadedSettings(true);
+        if (appData.settings) {
+            setAccueilSettings({
+                heroTitle: appData.settings.heroTitle || "",
+                heroSubtitle: appData.settings.heroSubtitle || "",
+                bannerTitle: appData.settings.bannerTitle || "",
+                bannerDesc: appData.settings.bannerDesc || "",
+                welcomeTitle: appData.settings.welcomeTitle || "Bienvenue sur\nDjapéro !",
+                welcomeSubtitle: appData.settings.welcomeSubtitle || "Votre panier frais.",
+                welcomeBtnText: appData.settings.welcomeBtnText || "Explorer",
+                welcomeBtnLink: appData.settings.welcomeBtnLink || "/produits",
+                welcomeBadgeText: appData.settings.welcomeBadgeText || "LADY",
+                welcomeBgColor: appData.settings.welcomeBgColor || "#1b4332",
+                welcomeImage: appData.settings.welcomeImage || "",
+                animCatalogImage: appData.settings.animCatalogImage || "",
+                animMarketImage: appData.settings.animMarketImage || "",
+                animDeliveryImage: appData.settings.animDeliveryImage || "",
+                animServicesImage: appData.settings.animServicesImage || "",
+                animTeamImage: appData.settings.animTeamImage || ""
+            });
         }
-    }, [dataLoading, data, hasLoadedSettings]);
+    }, [appData.settings]);
 
-    const resyncSettings = () => {
-        if (data?.settings && window.confirm("Réinitialiser les modifications non enregistrées ?")) {
-            setAccueilSettings(data.settings);
-        }
+    const updateAccueilField = (field: keyof typeof accueilSettings, value: string) => {
+        setAccueilSettings(prev => ({ ...prev, [field]: value }));
     };
-
-    const [isSaving, setIsSaving] = useState(false);
 
     const handleAccueilSubmit = async (e: React.FormEvent) => {
-        if (e) e.preventDefault();
+        e.preventDefault();
         setIsSaving(true);
+        setSaveError(null);
         try {
             const success = await updateSettings(accueilSettings);
+            setIsSaving(false);
             if (success) {
-                alert("✅ Contenu Accueil mis à jour avec succès !");
+                setShowSuccess(true);
+                setTimeout(() => setShowSuccess(false), 3000);
             } else {
-                alert("❌ Erreur lors de l'enregistrement.");
+                setSaveError("Désolé, vous n'avez pas les permissions admin.");
             }
-        } catch (err: any) {
-            console.error("Submit error:", err);
-            let message = "Une erreur est survenue lors de l'enregistrement.";
-            try {
-                const firestoreErr = JSON.parse(err.message);
-                message = `Erreur: ${firestoreErr.error}`;
-            } catch (e) {
-                message = err.message || message;
+        } catch (error: any) {
+            setIsSaving(false);
+            setSaveError(error.message || "Erreur de sauvegarde");
+            console.error("Save failed:", error);
+        }
+    };
+
+    const handleAddSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        
+        try {
+            let success = false;
+            if (activeTab === "produits") {
+                success = await addProduct({ ...productForm, createdAt: Date.now() });
+                if (success) setProductForm({ name: "", price: "", category: "", imageUrl: "", description: "", badge: "" });
+            } else if (activeTab === "videos") {
+                success = await addVideo({ ...videoForm, createdAt: Date.now() });
+                if (success) setVideoForm({ title: "", src: "", caption: "", category: "", thumbnail: "", srcType: 'youtube' });
+            } else if (activeTab === "marche") {
+                success = await addMarketItem({ ...marketForm, createdAt: Date.now() });
+                if (success) setMarketForm({ name: "", price: "", category: "", imageUrl: "", description: "", location: "", shopName: "" });
+            } else if (activeTab === "team") {
+                const finalTeamForm = { ...teamForm };
+                if (prestationInput.trim() && !finalTeamForm.prestations.includes(prestationInput.trim())) {
+                    finalTeamForm.prestations.push(prestationInput.trim());
+                }
+                
+                if (editingId) {
+                    const { img, ...rest } = finalTeamForm;
+                    const updateData: any = { ...rest };
+                    if (img) updateData.img = img;
+                    success = await updateTeamMember(editingId, updateData);
+                } else {
+                    success = await addTeamMember({ ...finalTeamForm, createdAt: Date.now() });
+                }
+
+                if (success) {
+                    setTeamForm({ name: "", role: "", img: "", phone: "", description: "", prestations: [] });
+                    setPrestationInput("");
+                    setEditingId(null);
+                }
+            } else if (activeTab === "affiches") {
+                success = await addAd({ ...adForm, createdAt: Date.now() });
+                if (success) setAdForm({ title: "", subtitle: "", price: "", imageUrl: "", link: "", active: true });
             }
-            alert(`❌ ${message}`);
+
+            if (success) {
+                setShowAddModal(false);
+                setPreviewImage(null);
+            }
+        } catch (error) {
+            console.error("Error during submittion:", error);
         } finally {
             setIsSaving(false);
         }
     };
 
-    const updateAccueilField = (field: string, value: any) => {
-        setAccueilSettings(prev => ({ ...prev, [field]: value }));
+    const handleEditTeam = (member: any) => {
+        setTeamForm({
+            name: member.name,
+            role: member.role,
+            img: member.img,
+            phone: member.phone || "",
+            description: member.description || "",
+            prestations: member.prestations || []
+        });
+        setEditingId(member.id);
+        setShowAddModal(true);
     };
 
-    const [loginError, setLoginError] = useState<string | null>(null);
-
-    const handleLogin = async () => {
-        setLoginError(null);
-        try {
-            await login();
-        } catch (err: any) {
-            if (err.code === 'auth/popup-blocked') {
-                setLoginError("Popup bloqué ! Veuillez autoriser les popups.");
-            } else if (err.code === 'auth/popup-closed-by-user') {
-                // Ignore
-            } else {
-                setLoginError("Erreur de connexion.");
-            }
+    const getYoutubeId = (url: string) => {
+        if (!url) return '';
+        if (!url.includes('youtube.com') && !url.includes('youtu.be')) return url;
+        let videoId = '';
+        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/i;
+        const match = url.match(regex);
+        if (match && match[1]) {
+            videoId = match[1];
         }
+        return videoId || url;
     };
-
-    if (dataLoading || !data) return <div className="p-20 text-center font-black tracking-tighter text-emerald-600 animate-pulse">Chargement Djapero...</div>;
-
-    if (!user || !isAdmin) {
-        return (
-            <div className="login-screen">
-                <div className="login-card">
-                    <div className="login-logo text-[#059669] font-black text-3xl mb-12 flex flex-col items-center justify-center gap-6 tracking-tighter">
-                        <Logo size={80} className="rounded-3xl" />
-                        <span className="decoration-4 underline decoration-[#a3e635]">Djapero Admin</span>
-                    </div>
-                    <h2 className="text-xl font-bold mb-2">Accès Administrateur</h2>
-                    <p className="text-gray-500 mb-8 text-sm">Veuillez vous connecter avec votre compte administrateur Google.</p>
-                    <button 
-                        onClick={handleLogin}
-                        className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition-colors shadow-lg flex items-center justify-center gap-3"
-                    >
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5 bg-white rounded-full" />
-                        Se connecter avec Google
-                    </button>
-                    {loginError && <p className="text-red-500 text-xs mt-4 font-bold uppercase tracking-widest">{loginError}</p>}
-                    {!isAdmin && user && <p className="text-red-500 text-sm mt-4 font-medium">Accès refusé. Vous n'êtes pas administrateur.</p>}
-                </div>
-            </div>
-        );
-    }
 
     return (
-        <div className="dashboard flex bg-[#f1f5f9] min-h-screen relative">
-            {data.settings?.adminCustomCode && (
-                <div dangerouslySetInnerHTML={{ __html: data.settings.adminCustomCode }} />
-            )}
-            {/* Mobile Sidebar Toggle */}
-            <button 
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="lg:hidden fixed top-6 right-6 z-[60] bg-[#0f172a] text-white p-4 rounded-2xl shadow-xl border border-white/10 active:scale-95 transition-all"
-            >
-                {isSidebarOpen ? <X size={24} /> : <LayoutDashboard size={24} />}
-            </button>
-
-            {/* Sidebar Overlay */}
+        <div className="min-h-screen bg-[#6366f1] bg-gradient-to-br from-[#6366f1] via-[#8b5cf6] to-[#ec4899] p-4 md:p-8 flex items-center justify-center font-sans">
             <AnimatePresence>
-                {isSidebarOpen && (
+                {latestAlert && (
                     <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="fixed inset-0 bg-black/60 z-[50] lg:hidden"
-                    />
+                        initial={{ opacity: 0, y: -50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        className="fixed top-12 left-1/2 -translate-x-1/2 z-[300] bg-white px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border-b-4 border-indigo-600"
+                    >
+                        <div className="w-10 h-10 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
+                            <Bell size={20} className="animate-bounce" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Flash Info</p>
+                            <p className="text-sm font-bold text-slate-800">{latestAlert}</p>
+                        </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Sidebar */}
-            <aside className={`fixed inset-y-0 left-0 w-72 bg-[#0f172a] text-white p-6 flex flex-col z-[55] transition-transform duration-500 transform shadow-2xl ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-                <div className="flex items-center gap-4 mb-12 px-2 group">
-                    <Logo size={48} className="rounded-2xl group-hover:scale-110 transition-transform shadow-none bg-emerald-500" />
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tighter leading-none mb-1">
-                            Djapero<span className="text-emerald-500">.</span>
-                        </h1>
-                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-500/50">Admin Console</p>
-                    </div>
-                </div>
-
-                <nav className="flex-grow space-y-1.5 overflow-y-auto pr-2 no-scrollbar">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-4 px-4">Menu Principal</p>
-                    {[
-                        { id: "accueil", label: "Dashboard", icon: LayoutDashboard },
-                        { id: "ads", label: "Bannières & Pub", icon: Megaphone },
-                        { id: "marche", label: "Le Marché", icon: StoreIcon },
-                        { id: "produits", label: "Boutique Officielle", icon: Box },
-                        { id: "videos", label: "Vidéos & Reels", icon: VideoIcon },
-                        { id: "services", label: "Expertises", icon: Briefcase },
-                        { id: "realisations", label: "Portfolio", icon: CameraIcon },
-                        { id: "notifications", label: "Notifications", icon: Bell },
-                        { id: "membres", label: "Membres", icon: Users },
-                        { id: "parametres", label: "Général", icon: Settings },
-                    ].map((item) => (
-                        <button
-                            key={item.id}
-                            onClick={() => {
-                                setActiveTab(item.id);
-                                setIsSidebarOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 relative group font-bold tracking-tight text-sm ${
-                                activeTab === item.id 
-                                ? "bg-emerald-500 text-white shadow-xl shadow-emerald-500/20" 
-                                : "text-white/40 hover:bg-white/5 hover:text-white"
-                            }`}
-                        >
-                            <item.icon size={20} className={activeTab === item.id ? "scale-110" : "group-hover:scale-110 transition-transform"} />
-                            <span>{item.label}</span>
-                            {activeTab === item.id && (
-                                <div className="absolute right-2 w-1.5 h-1.5 bg-white rounded-full shadow-lg shadow-white" />
-                            )}
-                        </button>
-                    ))}
-                    
-                    <div className="pt-8 mt-8 border-t border-white/5 space-y-3">
-                         <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-4 px-4">Utilitaires</p>
-                        <button 
-                            onClick={() => {
-                                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                a.download = `djapero-data-${new Date().toISOString().split('T')[0]}.json`;
-                                a.click();
-                            }}
-                            className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold text-xs bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all"
-                        >
-                            <Save size={16} /> JSON Export
-                        </button>
-                        <a href="/" target="_blank" className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold text-xs bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all underline decoration-emerald-500/30">
-                            <Eye size={16} /> Site Public
-                        </a>
-                    </div>
-                </nav>
-
-                <div className="mt-8 pt-8 border-t border-white/5">
-                    <div className="bg-white/5 rounded-3xl p-4 flex items-center gap-3 mb-6">
-                        <img 
-                            src={user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} 
-                            className="w-10 h-10 rounded-xl border border-white/10 shadow-lg" 
-                            alt="Admin" 
-                        />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-[9px] font-black uppercase text-emerald-500 mb-0.5">Connecté</p>
-                            <p className="text-xs font-bold text-white truncate lowercase tracking-tight">{user?.email?.split('@')[0] || "Admin"}</p>
+            <div className="w-full max-w-7xl bg-[#f8fafc]/90 backdrop-blur-xl rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row overflow-hidden border border-white/20 h-[90vh]">
+                
+                {/* Sidebar */}
+                <aside className="w-full md:w-64 bg-white/40 p-6 flex flex-col border-r border-white/40">
+                    <div className="flex items-center gap-3 mb-10 px-2">
+                        <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                            <StoreIcon size={22} />
                         </div>
-                        <button 
-                            onClick={() => logout()}
-                            className="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center flex-shrink-0"
-                            title="Déconnexion"
-                        >
-                            <LogOut size={16} />
-                        </button>
+                        <span className="text-xl font-bold text-slate-800 tracking-tight">Djapero</span>
                     </div>
-                </div>
-            </aside>
 
-            {/* Main Content */}
-            <main className="flex-grow lg:ml-72 p-4 md:p-10 w-full overflow-x-hidden relative">
-                {/* Background Decoration */}
-                <div className="absolute top-0 right-0 w-96 h-96 opacity-[0.03] pointer-events-none -mr-20 -mt-20">
-                    <svg viewBox="0 0 100 100" className="w-full h-full text-emerald-900 fill-current">
-                        <path d="M50 0 L100 25 L100 75 L50 100 L0 75 L0 25 Z" />
-                    </svg>
-                </div>
+                    <nav className="flex-grow space-y-2">
+                        {[
+                            { id: "accueil", label: "Dashboard", icon: LayoutDashboard },
+                            { id: "produits", label: "Catalogue", icon: ShoppingBag },
+                            { id: "marche", label: "Marché", icon: StoreIcon },
+                            { id: "videos", label: "Médias", icon: VideoIcon },
+                            { id: "visiteurs", label: "Visiteurs", icon: Users },
+                            { id: "messages", label: "Messagerie", icon: Mail },
+                            { id: "affiches", label: "Affiches", icon: ImageIcon },
+                            { id: "team", label: "Équipe", icon: Plus },
+                            { id: "notifications", label: "Alertes", icon: Bell },
+                            { id: "parametres", label: "Settings", icon: Settings },
+                        ].map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
+                                    activeTab === item.id 
+                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
+                                    : 'text-slate-500 hover:bg-white/60 hover:text-indigo-600'
+                                }`}
+                            >
+                                <item.icon size={20} className={activeTab === item.id ? '' : 'group-hover:scale-110 transition-transform'} />
+                                <span className={`font-semibold text-sm ${activeTab === item.id ? 'opacity-100' : 'opacity-80'}`}>{item.label}</span>
+                            </button>
+                        ))}
+                    </nav>
 
-                <AnimatePresence mode="wait">
-                    {activeTab === "ads" && (
-                        <motion.div key="ads" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            {/* Section Hero Banner */}
-                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 mt-4">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">En-tête Dashboard (Hero)</span>
-                                    </div>
-                                    <h2 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-1">
-                                        Importations & En-tête<span className="text-emerald-500">.</span>
-                                    </h2>
-                                    <p className="text-gray-400 font-bold text-xs opacity-80 pl-1 uppercase tracking-widest">Gérez les images de couverture et importations principales.</p>
-                                </div>
-                                <button
-                                    id="add-hero-banner-btn"
-                                    onClick={() => {
-                                        setPreviewUrl("");
-                                        setHeroModal({});
-                                    }}
-                                    className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-tighter flex items-center gap-3 shadow-xl shadow-emerald-500/10 hover:bg-emerald-600 transition-all active:scale-95 text-xs"
-                                >
-                                    <Plus size={18} /> Publier un En-tête
-                                </button>
-                            </header>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-20">
-                                { (data.heroBanners || []).map((hero, i) => (
-                                    <motion.div 
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        key={hero.id} 
-                                        className="bg-emerald-950 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group"
-                                    >
-                                        <div className="absolute inset-0 opacity-20 pointer-events-none">
-                                            <img src={hero.imageUrl} className="w-full h-full object-cover grayscale brightness-200" alt="" />
-                                        </div>
-                                        <div className="relative z-10">
-                                            <div className="flex justify-between items-start mb-6">
-                                                <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${hero.active ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-500'}`}>
-                                                    {hero.active ? 'Actif' : 'Inactif'}
-                                                </span>
-                                                <div className="flex gap-2">
-                                                    <button id={`edit-hero-${hero.id}`} onClick={() => { setPreviewUrl(hero.imageUrl); setHeroModal(hero); }} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-colors"><Edit2 size={16}/></button>
-                                                    <button id={`delete-hero-${hero.id}`} onClick={() => handleDeleteHeroBanner(hero.id)} className="p-3 bg-red-500/10 hover:bg-red-500/30 rounded-xl text-red-500 transition-colors"><Trash2 size={16}/></button>
-                                                </div>
-                                            </div>
-                                            <p className="text-emerald-400 font-bold text-[10px] uppercase tracking-[0.3em] mb-2">{hero.subtitle}</p>
-                                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none mb-4">{hero.title}</h3>
-                                            <p className="text-white/60 text-sm font-bold leading-relaxed">{hero.heading}</p>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                                {(data.heroBanners || []).length === 0 && (
-                                    <div className="col-span-full py-12 bg-gray-50 rounded-[3rem] border border-dashed border-gray-200 text-center flex flex-col items-center justify-center gap-4">
-                                        <Monitor size={32} className="text-gray-200" />
-                                        <p className="text-gray-300 font-black uppercase tracking-widest text-[10px]">Aucun en-tête configuré</p>
-                                    </div>
-                                )}
+                    <div className="mt-auto p-4 bg-white/40 rounded-3xl border border-white/60 hidden md:block">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 border-2 border-white" />
+                            <div>
+                                <p className="text-sm font-bold text-slate-800">Admin</p>
+                                <p className="text-[10px] text-slate-500 font-medium">Gestionnaire</p>
                             </div>
+                        </div>
+                    </div>
+                </aside>
 
-                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-t border-gray-100 pt-12">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-2 h-2 bg-pink-500 rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-pink-600">Affiches de Publicité</span>
-                                    </div>
-                                    <h1 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-1">
-                                        Publicités (Bannières)<span className="text-pink-500">.</span>
-                                    </h1>
-                                    <p className="text-gray-400 font-bold text-xs opacity-80 pl-1 uppercase tracking-widest">Gérez les bannières publicitaires (Affiche Pub) du dashboard.</p>
-                                </div>
-                                <button
-                                    id="add-ad-banner-btn"
-                                    onClick={() => {
-                                        setPreviewUrl("");
-                                        setAdModal({});
-                                    }}
-                                    className="bg-pink-500 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-tighter flex items-center gap-3 shadow-xl shadow-pink-500/10 hover:bg-pink-600 transition-all active:scale-95 text-xs"
-                                >
-                                    <Plus size={18} /> Publier une Affiche
-                                </button>
-                            </header>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                { (data.ads || []).map((ad, i) => (
-                                    <motion.div 
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ delay: i * 0.05 }}
-                                        key={ad.id} 
-                                        className="bg-white p-6 rounded-[3rem] shadow-xl border border-gray-100 group hover:-translate-y-2 transition-all"
-                                    >
-                                        <div className="relative aspect-[21/9] rounded-[2rem] overflow-hidden mb-6 bg-gray-50">
-                                            <img 
-                                                src={ad.imageUrl} 
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[2000ms]" 
-                                                alt={ad.title} 
-                                            />
-                                            <div className={`absolute top-4 left-4 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${ad.active ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
-                                                {ad.active ? 'Active' : 'Désactivée'}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="px-2 mb-6">
-                                            <h3 className="text-2xl font-black text-[#0f172a] mb-2 leading-none uppercase tracking-tighter">{ad.title}</h3>
-                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest line-clamp-2 italic">{ad.subtitle}</p>
-                                        </div>
-                                        
-                                        <div className="flex gap-3">
-                                            <button 
-                                                onClick={() => {
-                                                    setPreviewUrl(ad.imageUrl);
-                                                    setAdModal(ad);
-                                                }}
-                                                className="flex-1 bg-gray-50 text-gray-400 p-4 rounded-2xl hover:bg-pink-50 hover:text-pink-600 transition-colors flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                                            >
-                                                <Edit2 size={16} /> Éditer
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDeleteAd(ad.id)}
-                                                className="w-14 bg-gray-50 text-gray-400 p-4 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                                {(data.ads || []).length === 0 && (
-                                    <div className="col-span-full py-24 bg-white/50 rounded-[3rem] border-2 border-dashed border-gray-200 text-center flex flex-col items-center justify-center gap-6">
-                                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-300">
-                                            <Megaphone size={40} />
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-400 font-black uppercase tracking-[0.2em] text-xs mb-2">Votre vitrine est vide.</p>
-                                            <p className="text-gray-300 font-bold text-[10px] uppercase tracking-widest max-w-xs mx-auto">Ajoutez une affiche publicitaire pour promouvoir vos services sur la page d'accueil.</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
-                    {activeTab === "marche" && (
-                        <motion.div key="marche" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-600">Gestion Marketplace</span>
-                                    </div>
-                            <h1 className="text-4xl md:text-5xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-2">
-                                Le <span className="text-orange-500">Marché.</span>
-                            </h1>
-                            <p className="text-gray-400 font-bold text-sm md:text-lg opacity-80 pl-1">Modérez les annonces déposées par la communauté.</p>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        setPreviewUrl("");
-                                        setMarketModal({});
-                                    }}
-                                    className="bg-orange-500 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-tighter flex items-center gap-3 shadow-xl shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95 text-sm"
-                                >
-                                    <Plus size={20} /> Nouveau Produit
-                                </button>
-                            </header>
-
-                            <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-6 space-y-6 block">
-                                { (data.marketItems || []).map((item, i) => (
-                                    <motion.div 
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: i * 0.05 }}
-                                        key={item.id} 
-                                        className="break-inside-avoid bg-white p-4 rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-50 group hover:-translate-y-1 transition-all inline-block w-full mb-6"
-                                    >
-                                        <div className="relative h-auto min-h-[150px] rounded-[2.5rem] overflow-hidden mb-6 shadow-inner bg-gray-50 flex items-center justify-center p-0">
-                                            <img 
-                                                src={item.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
-                                                className="w-full h-auto object-cover group-hover:scale-110 transition-transform duration-700" 
-                                                alt={item.name} 
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800';
-                                                }}
-                                            />
-                                            <div className="absolute top-4 right-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded-full text-[12px] font-black text-white shadow-lg">
-                                                {item.price}
-                                            </div>
-                                            <div className="absolute left-4 bottom-4 bg-orange-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
-                                                {item.category}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="px-2">
-                                            <h3 className="text-2xl font-black text-[#0f172a] mb-2 leading-none uppercase tracking-tighter transition-colors group-hover:text-orange-500">{item.name}</h3>
-                                            
-                                            <div className="flex flex-wrap gap-4 mb-8 text-gray-400 font-bold text-[11px] uppercase tracking-widest">
-                                                <div className="flex items-center gap-2">
-                                                    <MapPin size={14} className="text-orange-500" />
-                                                    {item.location}
-                                                </div>
-                                                {item.shopName && (
-                                                    <div className="flex items-center gap-2">
-                                                        <StoreIcon size={14} className="text-orange-500" />
-                                                        {item.shopName}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            
-                                            <div className="flex gap-3">
-                                                <button 
-                                                    onClick={() => {
-                                                        setPreviewUrl("");
-                                                        setMarketModal(item);
-                                                    }}
-                                                    className="flex-1 bg-gray-50 text-gray-500 p-4 rounded-2xl hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                                                >
-                                                    <Edit2 size={16} /> Éditer
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDeleteMarketItem(item.id)}
-                                                    className="w-14 bg-gray-50 text-gray-400 p-4 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-                    {activeTab === "accueil" && (
-                        <motion.div key="accueil" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <header className="mb-12 flex justify-between items-end">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">Console Management v4.2</span>
-                                    </div>
-                                    <h1 className="text-4xl md:text-6xl font-black text-[#0f172a] uppercase tracking-tighter leading-[0.8] mb-4">
-                                        Tableau de <br/><span className="text-emerald-500">Bord.</span>
-                                    </h1>
-                                    <p className="text-gray-400 font-bold text-sm md:text-lg opacity-80 max-w-2xl">
-                                        Gérez l'ensemble des contenus de votre page principale et suivez l'état de votre écosystème.
-                                    </p>
-                                </div>
-                                <div className="flex flex-col gap-3">
-                                    <button 
-                                        onClick={handleAccueilSubmit}
-                                        className="bg-emerald-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-tighter flex items-center justify-center gap-3 shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all active:scale-95 text-sm"
-                                    >
-                                        <Save size={20} /> Enregistrer Tout
-                                    </button>
-                                    <button 
-                                        onClick={resyncSettings}
-                                        className="bg-gray-200 text-gray-600 px-6 py-3 rounded-xl font-black uppercase tracking-tighter text-[10px] hover:bg-gray-300 transition-all active:scale-95 shadow-sm text-center"
-                                    >
-                                        Réinitialiser
-                                    </button>
-                                </div>
-                            </header>
-
-                            {/* Publication Directe depuis le Bord */}
-                            <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 mb-12 relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50/50 rounded-full -mr-32 -mt-32 blur-3xl group-hover:scale-110 transition-transform" />
-                                <h3 className="text-xl font-black uppercase tracking-tighter text-emerald-600 mb-8 flex items-center gap-3">
-                                    <Plus size={24} className="p-1 bg-emerald-500 text-white rounded-lg" />
-                                    Publication Express Produit
-                                </h3>
-                                <form className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10" onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    setIsSaving(true);
-                                    try {
-                                        const formData = new FormData(e.currentTarget);
-                                        await addProduct({
-                                            name: formData.get("name") as string,
-                                            price: formData.get("price") as string,
-                                            category: "Général",
-                                            badge: "",
-                                            description: "Publié via Bord Express",
-                                            imageUrl: "",
-                                            createdAt: Date.now()
-                                        });
-                                        (e.target as HTMLFormElement).reset();
-                                        alert("✅ Produit publié avec succès !");
-                                    } catch (err) {
-                                        alert("❌ Erreur lors de la publication.");
-                                    } finally {
-                                        setIsSaving(false);
-                                    }
-                                }}>
-                                    <div className="space-y-2">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-emerald-600 ml-2">Nom du produit</label>
-                                        <input required name="name" className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-bold" placeholder="Ex: Mangue Elite" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-emerald-600 ml-2">Prix (FCFA)</label>
-                                        <input required name="price" className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-bold" placeholder="1.500" />
-                                    </div>
-                                    <div className="flex items-end">
-                                        <button 
-                                            disabled={isSaving}
-                                            className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-emerald-700 active:scale-95 transition-all text-[10px]"
-                                        >
-                                            {isSaving ? "Chargement..." : "Publier Maintenant"}
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-12">
-                                {[
-                                    { id: "produits", label: "Articles Boutique", val: (data.products || []).length, icon: Box, color: "emerald" },
-                                    { id: "marche", label: "Vendeurs Marché", val: (data.marketItems || []).length, icon: StoreIcon, color: "orange" },
-                                    { id: "videos", label: "Vidéos Social", val: (data.videos || []).length, icon: VideoIcon, color: "blue" },
-                                    { id: "services", label: "Expertises", val: (data.services || []).length, icon: Briefcase, color: "purple" },
-                                    { id: "ads", label: "Pub Affiches", val: (data.ads || []).length, icon: Megaphone, color: "pink" },
-                                    { id: "ads", label: "En-têtes Hero", val: (data.heroBanners || []).length, icon: Monitor, color: "green" },
-                                ].map((stat, i) => (
-                                    <motion.div 
-                                        key={stat.label}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: i * 0.1 }}
-                                        onClick={() => {
-                                             if (stat.id) setActiveTab(stat.id);
-                                        }}
-                                        className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer"
-                                    >
-                                        <div className={`w-12 h-12 bg-gray-50 text-gray-400 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors`}>
-                                            <stat.icon size={24} />
-                                        </div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">{stat.label}</p>
-                                        <p className="text-3xl font-black text-[#0f172a] tracking-tighter">{stat.val}</p>
-                                    </motion.div>
-                                ))}
-                            </div>
-
-                            {/* Quick Actions Bar */}
-                            <div className="mb-12 bg-white/40 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/50 flex flex-wrap gap-4">
+                {/* Main Content Area */}
+                <main className="flex-1 flex flex-col min-w-0">
+                    {/* Header */}
+                    <header className="h-20 px-8 flex items-center justify-between border-b border-white/40">
+                        <div className="flex-1 max-w-md relative hidden md:block">
+                            <input 
+                                type="text" 
+                                placeholder="Rechercher..." 
+                                className="w-full bg-white/60 border-none rounded-2xl py-2.5 px-5 outline-none focus:ring-2 focus:ring-indigo-400/50 text-sm font-medium transition-all"
+                            />
+                        </div>
+                        <div className="flex items-center gap-4">
+                            {["produits", "marche", "videos", "team", "notifications"].includes(activeTab) && (
                                 <button 
-                                    onClick={() => {
-                                        setActiveTab("videos");
-                                        setVideoModal({});
-                                        setVideoPreviewUrl("");
-                                        setVideoSrcType('youtube');
-                                    }}
-                                    className="px-6 py-4 bg-blue-600 text-white rounded-2xl font-[1000] text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-500/20"
+                                    onClick={() => setShowAddModal(true)}
+                                    className="bg-indigo-600 text-white px-6 py-2.5 rounded-2xl text-sm font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
                                 >
-                                    <VideoIcon size={18} /> Publier un Reel
+                                    <Plus size={18} /> <span>Ajouter</span>
                                 </button>
-                                <button 
-                                    onClick={() => {
-                                        setActiveTab("produits");
-                                        setProductModal({});
-                                        setPreviewUrl("");
-                                    }}
-                                    className="px-6 py-4 bg-emerald-600 text-white rounded-2xl font-[1000] text-[10px] uppercase tracking-widest flex items-center gap-3 hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
-                                >
-                                    <Plus size={18} /> Nouveau Produit
-                                </button>
+                            )}
+                            <div className="w-10 h-10 rounded-2xl bg-white/60 flex items-center justify-center text-slate-600 cursor-pointer hover:bg-white transition-all">
+                                <Bell size={20} />
                             </div>
+                        </div>
+                    </header>
 
-                            {/* Recent Notifications Preview */}
-                            <div className="mb-12">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-xl font-black uppercase tracking-tighter text-[#0f172a]">Dernières Alertes</h3>
-                                    <button onClick={() => setActiveTab("notifications")} className="text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:underline">Voir tout</button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {(data.notifications || []).length === 0 ? (
-                                        <div className="col-span-2 bg-white/50 p-8 rounded-[2rem] border border-dashed border-gray-200 text-center">
-                                            <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Aucune notification active</p>
-                                        </div>
-                                    ) : (
-                                        (data.notifications || []).slice(0, 2).map((n, i) => (
-                                            <motion.div 
-                                                key={n.id}
-                                                initial={{ opacity: 0, x: -20 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: i * 0.1 }}
-                                                className="bg-white p-6 rounded-[2rem] border border-gray-100 flex items-center gap-4 group"
-                                            >
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${n.type === 'info' ? 'bg-blue-50 text-blue-500' : n.type === 'warning' ? 'bg-orange-50 text-orange-500' : 'bg-red-50 text-red-500'}`}>
-                                                    <Bell size={18} />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-black text-[#0f172a] uppercase truncate">{n.title}</p>
-                                                    <p className="text-[10px] text-gray-400 font-medium truncate">{n.message}</p>
-                                                </div>
-                                            </motion.div>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Derniers Produits Ajoutés */}
-                            <div className="mb-12">
-                                <div className="flex items-center justify-between mb-8">
-                                    <div>
-                                        <h3 className="text-3xl font-black uppercase tracking-tighter text-[#0f172a]">Derniers Produits</h3>
-                                        <div className="w-12 h-1 bg-emerald-500 rounded-full mt-2" />
-                                    </div>
-                                    <button onClick={() => setActiveTab("produits")} className="px-6 py-2 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all">Catalogue Complet</button>
-                                </div>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 4xl:grid-cols-10 gap-4 md:gap-6">
-                                    {(data.products || []).slice(0, 10).map((p, i) => (
-                                        <motion.div 
-                                            key={p.id}
-                                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                                            transition={{ delay: i * 0.05 }}
-                                            className="bg-white p-6 rounded-[2.5rem] border border-emerald-50/50 shadow-sm flex flex-col items-center text-center group cursor-pointer hover:shadow-2xl hover:shadow-emerald-900/10 transition-all hover:-translate-y-2"
-                                            onClick={() => setSelectedDetail(p)}
-                                        >
-                                            <div className="w-full aspect-square bg-gray-50 rounded-[2rem] overflow-hidden mb-6 p-10 group-hover:bg-emerald-50/30 transition-colors">
-                                                <img 
-                                                    src={p.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=200"} 
-                                                    className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-700" 
-                                                    alt={p.name}
-                                                    onError={(e) => {
-                                                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=200';
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="px-1">
-                                                <p className="text-[11px] font-black uppercase text-[#0f172a] truncate w-full mb-1 group-hover:text-emerald-600 transition-colors tracking-tight">{p.name}</p>
-                                                <div className="flex items-center justify-center gap-1 bg-emerald-50/50 px-3 py-1 rounded-full border border-emerald-100/50">
-                                                    <span className="text-[12px] font-black text-emerald-600">{p.price}</span>
-                                                    {!p.price.toString().toUpperCase().includes('FCFA') && (
-                                                        <span className="text-[7px] font-black text-emerald-600/40 uppercase tracking-widest">FCFA</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                    {(data.products || []).length === 0 && (
-                                        <div className="col-span-full py-32 bg-gray-50/50 rounded-[4rem] border border-dashed border-gray-200 text-center">
-                                             <p className="text-gray-400 font-bold uppercase tracking-widest text-[12px]">Aucun produit ajouté au catalogue</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <form className="space-y-12" onSubmit={handleAccueilSubmit}>
-                                {/* Section Banner & Hero */}
-                                <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] shadow-xl border border-gray-100">
-                                    <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-blue-600 mb-8 border-b-2 border-blue-50 pb-4">Bannière & Titres</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 ml-2">Titre Hero Principal</label>
-                                            <input 
-                                                value={accueilSettings.heroTitle || ""} 
-                                                onChange={e => updateAccueilField('heroTitle', e.target.value)}
-                                                className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-blue-500 outline-none font-black uppercase tracking-tighter" 
-                                            />
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 ml-2 mt-4 block">Sous-titre Hero</label>
-                                            <input 
-                                                value={accueilSettings.heroSubtitle || ""} 
-                                                onChange={e => updateAccueilField('heroSubtitle', e.target.value)}
-                                                className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-blue-500 outline-none font-bold text-xs uppercase tracking-widest text-gray-400" 
-                                            />
-                                        </div>
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 ml-2">Titre Bannière Studio</label>
-                                            <input 
-                                                value={accueilSettings.bannerTitle || ""} 
-                                                onChange={e => updateAccueilField('bannerTitle', e.target.value)}
-                                                className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-blue-500 outline-none font-black uppercase tracking-tighter" 
-                                            />
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 ml-2 mt-4 block">Description Bannière</label>
-                                            <textarea 
-                                                value={accueilSettings.bannerDesc || ""} 
-                                                onChange={e => updateAccueilField('bannerDesc', e.target.value)}
-                                                rows={2} 
-                                                className="w-full bg-gray-50 px-6 py-4 rounded-2xl border border-gray-100 focus:border-blue-500 outline-none font-bold text-xs text-gray-400" 
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button type="submit" disabled={isSaving || uploading} className="w-full bg-[#10b981] text-white py-6 md:py-8 rounded-2xl md:rounded-[2.5rem] font-black uppercase tracking-[0.3em] shadow-2xl hover:bg-emerald-700 transition-all hover:scale-[1.01] flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {(isSaving || uploading) ? (
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-                                            <span>{uploading ? "Transfert..." : "Enregistrement..."}</span>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <Save size={24} className="md:w-8 md:h-8" /> 
-                                            <span className="text-xs md:text-base">Mettre à jour l'accueil</span>
-                                        </>
-                                    )}
-                                </button>
-                            </form>
-                        </motion.div>
-                    )}
-
-                    {activeTab === "produits" && (
-                        <motion.div key="produits" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-14">
-                                <div>
-                                    <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">Catalogue Produits</h1>
-                                    <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-emerald-100 underline-offset-4 text-xs md:text-base">Ajoutez et gérez les articles du marché Djapero.</p>
-                                </div>
-                                <div className="flex gap-4 w-full md:w-auto">
-                                    <button 
-                                        onClick={() => setBulkProductModal(true)}
-                                        className="bg-[#0f172a] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-[#10b981] transition-all shadow-xl hover:scale-105 active:scale-95 text-xs md:text-sm flex-1 md:flex-none"
-                                    >
-                                        <Box size={20} className="inline-block mr-2" /> Ajout Multiple
-                                    </button>
-                                    <button 
-                                        onClick={() => {
-                                            setProductModal({});
-                                            setPreviewUrl("");
-                                        }}
-                                        className="bg-emerald-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-emerald-700 transition-all shadow-xl hover:scale-105 active:scale-95 text-xs md:text-sm flex-1 md:flex-none"
-                                    >
-                                        <Plus size={20} className="inline-block mr-2" /> Ajouter un produit
-                                    </button>
-                                </div>
-                                <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto mt-6">
-                                    <div className="relative flex-1 min-w-[200px]">
-                                        <Filter size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <select 
-                                            className="w-full bg-white pl-12 pr-6 py-4 rounded-2xl border border-emerald-100 outline-none font-bold text-xs uppercase tracking-widest text-[#0f172a] appearance-none shadow-sm focus:border-emerald-500 transition-all"
-                                            value={categoryFilter}
-                                            onChange={e => setCategoryFilter(e.target.value)}
-                                        >
-                                            <option value="Tous">Toutes Catégories</option>
-                                            <option value="Frais">Frais</option>
-                                            <option value="Epicerie">Épicerie</option>
-                                            <option value="Surgelés">Surgelés</option>
-                                            <option value="Boissons">Boissons</option>
-                                            <option value="Equipements">Équipements</option>
-                                            <option value="Autres">Autres</option>
-                                        </select>
-                                    </div>
-                                    <div className="relative flex-[2] min-w-[250px]">
-                                        <Plus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 rotate-45" />
-                                        <input 
-                                            className="w-full bg-white pl-12 pr-6 py-4 rounded-2xl border border-emerald-100 outline-none font-bold text-sm tracking-tight text-[#0f172a] shadow-sm focus:border-emerald-500 transition-all placeholder:text-gray-200"
-                                            placeholder="Rechercher un produit..."
-                                            value={searchQuery}
-                                            onChange={e => setSearchQuery(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="admin-product-grid">
-                                {(data.products || [])
-                                    .filter(p => {
-                                        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.toLowerCase().includes(searchQuery.toLowerCase());
-                                        const matchesCategory = categoryFilter === "Tous" || p.category === categoryFilter;
-                                        return matchesSearch && matchesCategory;
-                                    })
-                                    .map(p => (
-                                    <div key={p.id} className="admin-product-card group">
-                                            <div className="h-auto aspect-square bg-gray-50 flex items-center justify-center p-6 relative group-hover:bg-emerald-50/50 transition-colors">
-                                                <img src={p.imageUrl || undefined} alt={p.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500" />
-                                                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => {
-                                                    setProductModal(p);
-                                                    setPreviewUrl(p.imageUrl || "");
-                                                }} className="p-3 bg-white/90 backdrop-blur-md rounded-xl shadow-lg text-blue-600 hover:bg-blue-600 hover:text-white transition-all transform hover:scale-110"><Edit2 size={18}/></button>
-                                                <button 
-                                                    onClick={async () => {
-                                                        if (confirm("Supprimer ce produit ?")) {
-                                                            await deleteProduct(p.id);
-                                                        }
-                                                    }}
-                                                    className="p-3 bg-white/90 backdrop-blur-md rounded-xl shadow-lg text-red-600 hover:bg-red-600 hover:text-white transition-all transform hover:scale-110"
-                                                >
-                                                    <Trash2 size={18}/>
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="p-6">
-                                            <div className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-2">{p.category}</div>
-                                            <h3 className="font-black text-lg text-[#0f172a] tracking-tighter leading-tight uppercase group-hover:text-emerald-600 transition-colors">{p.name}</h3>
-                                            <div className="mt-4 flex items-center justify-between">
-                                                <p className="text-xl font-black text-gray-900 tracking-tighter">{p.price} <span className="text-[10px] opacity-50 uppercase tracking-widest font-bold">FCFA</span></p>
-                                                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                                                    <ShoppingBag size={14} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {activeTab === "videos" && (
-                        <motion.div key="videos" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-14">
-                                <div>
-                                    <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">Vidéos Sociales & Reels</h1>
-                                    <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-blue-100 underline-offset-4 text-xs md:text-base">Gérez les vidéos verticales (YouTube Shorts ou Fichiers MP4) pour votre plateforme.</p>
-                                </div>
-                                <button onClick={() => {
-                                    setVideoModal({});
-                                    setPreviewUrl("");
-                                    setVideoPreviewUrl("");
-                                    setVideoSrcType('youtube');
-                                }} className="bg-blue-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-blue-700 transition-all shadow-xl hover:scale-105 text-xs md:text-sm uppercase w-full md:w-auto"><Plus size={20} className="inline-block mr-2" /> Publier une vidéo</button>
-                            </div>
-                            <div className="admin-product-grid">
-                                {(data.videos || []).map(v => (
-                                    <div key={v.id} className="admin-product-card group p-4 bg-white">
-                                         <div className="h-auto bg-black rounded-3xl mb-6 overflow-hidden relative shadow-2xl group-hover:shadow-blue-500/20 transition-all">
-                                            {v.thumbnail || (v.srcType === 'youtube' && v.src) ? (
-                                                <img 
-                                                    src={v.thumbnail || (v.src ? `https://img.youtube.com/vi/${v.src}/0.jpg` : undefined)} 
-                                                    className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-110"
-                                                    onError={(e) => {
-                                                        const img = e.currentTarget;
-                                                        if (v.srcType === 'file') img.style.display = 'none';
-                                                    }}
-                                                />
-                                            ) : null}
-                                            {(!v.thumbnail && v.srcType === 'file' && v.src) && (
-                                                <video src={v.src || undefined} className="w-full h-full object-cover opacity-50" />
-                                            )}
-                                            {(!v.thumbnail && v.srcType !== 'file' && !v.src) && (
-                                                <div className="w-full h-full flex flex-col items-center justify-center text-white/10 uppercase font-black tracking-tighter text-4xl -rotate-12 gap-4">
-                                                    <span>Social Ads</span>
-                                                    <VideoIcon size={40} className="opacity-20" />
-                                                </div>
-                                            )}
-                                            <div className="absolute top-4 left-4 flex gap-2">
-                                                <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${v.srcType === 'file' ? 'bg-purple-500 text-white' : 'bg-blue-500 text-white'}`}>
-                                                    {v.srcType === 'file' ? 'Fichier' : 'YouTube'}
-                                                </div>
-                                            </div>
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <VideoIcon size={48} className="text-white animate-pulse" />
-                                            </div>
-                                         </div>
-                                         <h3 className="font-black text-lg text-[#0f172a] truncate uppercase tracking-tighter mb-4">{v.title}</h3>
-                                         <div className="flex gap-3">
-                                            <button onClick={() => {
-                                                setVideoModal(v);
-                                                setPreviewUrl(v.thumbnail || "");
-                                                setVideoPreviewUrl(v.srcType === 'file' ? v.src : "");
-                                                setVideoSrcType(v.srcType === 'file' ? 'file' : 'youtube');
-                                            }} className="flex-1 py-3 bg-blue-50 text-blue-600 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-600 hover:text-white">Modifier</button>
-                                                <button onClick={async () => { if(confirm("Supprimer ?")) await deleteVideo(v.id) }} className="p-3 text-red-400 bg-red-50 hover:bg-red-600 hover:text-white rounded-xl transition-all"><Trash2 size={18}/></button>
-                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {activeTab === "realisations" && (
-                        <motion.div key="realisations" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-14">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-2 h-2 bg-[#ffbe0b] rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-yellow-600">Galerie Exclusive</span>
-                                    </div>
-                                    <h1 className="text-4xl md:text-5xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">
-                                        Port<span className="text-[#ffbe0b]">folio.</span>
-                                    </h1>
-                                    <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-yellow-100 underline-offset-4 text-xs md:text-base">Gérez les créations visuelles exposées avec le nouveau design.</p>
-                                </div>
-                                <button onClick={() => {
-                                    setRealModal({ rating: 5 });
-                                    setPreviewUrl("");
-                                }} className="bg-[#ffbe0b] text-black px-10 py-5 rounded-2xl font-black uppercase tracking-tighter flex items-center shadow-xl hover:bg-yellow-500 transition-all active:scale-95 text-sm w-full md:w-auto">
-                                    <Plus size={20} className="mr-3" /> Ajouter une création
-                                </button>
-                            </div>
-
-                            <div className="admin-product-grid">
-                                {(data.reals || []).map(r => (
-                                    <motion.div 
-                                        key={r.id} 
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        className="admin-product-card group bg-white p-3 rounded-[2.5rem] relative"
-                                    >
-                                        {/* Image Section */}
-                                        <div className="aspect-[4/5] overflow-hidden rounded-[2rem] relative bg-gray-50 mb-4 group/img">
-                                            <img 
-                                                src={r.imageUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800"} 
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
-                                                alt={r.title}
-                                            />
-                                            
-                                            {/* Badge Overlay */}
-                                            {r.badge && (
-                                                <div className="absolute top-4 left-4 bg-[#064e3b] text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg">
-                                                    {r.badge}
-                                                </div>
-                                            )}
-
-                                            {/* Quick Actions Overlay */}
-                                            <div className="absolute top-4 right-4 flex flex-col gap-2 transform translate-x-12 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300">
-                                                <button className="w-9 h-9 bg-white rounded-full flex items-center justify-center text-gray-400 hover:text-emerald-500 shadow-xl border border-gray-100 transition-colors">
-                                                    <Heart size={16} />
-                                                </button>
-                                                <button className="w-9 h-9 bg-white rounded-full flex items-center justify-center text-gray-400 hover:text-emerald-500 shadow-xl border border-gray-100 transition-colors">
-                                                    <Maximize2 size={16} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => {
-                                                        setRealModal(r);
-                                                        setPreviewUrl(r.imageUrl || "");
-                                                    }}
-                                                    className="w-9 h-9 bg-white rounded-full flex items-center justify-center text-emerald-600 hover:bg-emerald-600 hover:text-white shadow-xl border border-gray-100 transition-all"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                            </div>
-
-                                            {/* Delete Action (Simplified) */}
-                                            <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button 
-                                                    onClick={async () => { if(confirm("Supprimer ?")) await deleteReal(r.id) }}
-                                                    className="w-9 h-9 bg-red-500 text-white rounded-full flex items-center justify-center shadow-xl hover:bg-red-600 transition-all"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                    {/* Scrollable Area */}
+                    <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={activeTab}
+                                initial={{ opacity: 0, x: 10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -10 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                {activeTab === "affiches" && (
+                                    <div className="max-w-3xl">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div>
+                                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tighter">Gestion des Affiches</h2>
+                                                <p className="text-slate-500 font-bold mt-0 uppercase tracking-widest text-[8px]">Personnalisez le bandeau d'accueil principal</p>
                                             </div>
                                         </div>
 
-                                        {/* Content Section */}
-                                        <div className="px-2 pb-2">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <div>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{r.category || "Projet"}</p>
-                                                    <h3 className="font-black text-sm text-[#0f172a] uppercase tracking-tighter leading-tight group-hover:text-[#ffbe0b] transition-colors">{r.title}</h3>
-                                                </div>
-                                                <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-full">
-                                                    <Star size={10} className="fill-yellow-400 text-yellow-400" />
-                                                    <span className="text-[10px] font-black text-yellow-600">{r.rating || (4.5 + Math.random() * 0.5).toFixed(1)}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 mt-3">
-                                                {r.price && (
-                                                    <>
-                                                        <span className="text-sm font-black text-emerald-600 uppercase tracking-tighter">{r.price}</span>
-                                                        {r.oldPrice && (
-                                                            <span className="text-[10px] font-bold text-gray-300 line-through uppercase tracking-tighter">{r.oldPrice}</span>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {activeTab === "notifications" && (
-                        <motion.div key="notifications" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-14">
-                                <div>
-                                    <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">Notifications</h1>
-                                    <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-red-100 underline-offset-4 text-xs md:text-base">Envoyez des messages importants à tous les utilisateurs.</p>
-                                </div>
-                                <button 
-                                    onClick={() => setNotifModal({})}
-                                    className="bg-black text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-red-600 transition-all shadow-xl hover:scale-105 active:scale-95 text-xs md:text-sm w-full md:w-auto"
-                                >
-                                    <Plus size={20} className="inline-block mr-2" /> Créer une alerte
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-6">
-                                {(data.notifications || []).length === 0 ? (
-                                    <div className="bg-white p-12 rounded-[2rem] border border-dashed border-gray-200 text-center">
-                                        <Bell className="mx-auto text-gray-200 mb-4" size={64} />
-                                        <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">Aucune notification envoyée</p>
-                                    </div>
-                                ) : (
-                                    (data.notifications || []).map(n => (
-                                        <div key={n.id} className="bg-white p-8 rounded-[2rem] shadow-xl border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-6">
-                                            <div className="flex items-center gap-6">
-                                                <div className={`p-4 rounded-2xl ${n.type === 'info' ? 'bg-blue-50 text-blue-500' : n.type === 'warning' ? 'bg-orange-50 text-orange-500' : 'bg-red-50 text-red-500'}`}>
-                                                    <Bell size={32} />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-xl font-black text-[#0f172a] uppercase tracking-tighter">{n.title}</h3>
-                                                    <p className="text-gray-500 font-medium text-sm mt-1">{n.message}</p>
-                                                    <div className="flex items-center gap-2 mt-2">
-                                                        <span className="text-[10px] font-black uppercase bg-gray-50 px-2 py-1 rounded text-gray-400">
-                                                            {new Date(n.createdAt).toLocaleDateString()}
-                                                        </span>
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${n.type === 'info' ? 'bg-blue-500 text-white' : n.type === 'warning' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'}`}>
-                                                            {n.type}
-                                                        </span>
+                                        <form className="space-y-4" onSubmit={handleAccueilSubmit}>
+                                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-50 space-y-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Gros titre (Affiche)</label>
+                                                            <textarea 
+                                                                rows={2}
+                                                                value={accueilSettings.welcomeTitle} 
+                                                                onChange={e => updateAccueilField('welcomeTitle', e.target.value)}
+                                                                className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-100 focus:border-indigo-400 outline-none font-black text-base transition-all" 
+                                                                placeholder="Bienvenue sur\nDjapéro !"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Petit texte / Slogan</label>
+                                                            <input 
+                                                                value={accueilSettings.welcomeSubtitle} 
+                                                                onChange={e => updateAccueilField('welcomeSubtitle', e.target.value)}
+                                                                className="w-full bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 focus:border-indigo-400 outline-none font-bold text-[10px] uppercase tracking-widest text-slate-500" 
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Couleur de fond (Hex)</label>
+                                                            <div className="flex gap-2">
+                                                                <input 
+                                                                    type="color"
+                                                                    value={accueilSettings.welcomeBgColor} 
+                                                                    onChange={e => updateAccueilField('welcomeBgColor', e.target.value)}
+                                                                    className="w-10 h-10 rounded-lg border-none p-0 cursor-pointer overflow-hidden shrink-0" 
+                                                                />
+                                                                <input 
+                                                                    value={accueilSettings.welcomeBgColor} 
+                                                                    onChange={e => updateAccueilField('welcomeBgColor', e.target.value)}
+                                                                    className="flex-1 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 focus:border-indigo-400 outline-none font-mono text-xs" 
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Image de fond (Affiche)</label>
+                                                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                                <div className="relative w-12 h-12 bg-white rounded-lg overflow-hidden shadow-inner flex items-center justify-center border border-dashed border-slate-200 group cursor-pointer shrink-0">
+                                                                    {accueilSettings.welcomeImage ? (
+                                                                        <img src={accueilSettings.welcomeImage || undefined} className="w-full h-full object-cover" alt="Banner" />
+                                                                    ) : (
+                                                                        <ImageIcon className="text-slate-300" size={18} />
+                                                                    )}
+                                                                    <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'welcome')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                                </div>
+                                                                <div className="flex-1 text-[8px] font-bold text-slate-400 uppercase leading-tight">
+                                                                    Télécharger<br/>l'affiche
+                                                                </div>
+                                                                {accueilSettings.welcomeImage && (
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => setAccueilSettings(prev => ({ ...prev, welcomeImage: "" }))}
+                                                                        className="text-red-400 hover:text-red-600 transition-colors p-1"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="space-y-4">
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="space-y-1.5">
+                                                                <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Texte Bouton</label>
+                                                                <input 
+                                                                    value={accueilSettings.welcomeBtnText} 
+                                                                    onChange={e => updateAccueilField('welcomeBtnText', e.target.value)}
+                                                                    className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 focus:border-indigo-400 outline-none font-bold text-[10px]" 
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1.5">
+                                                                <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Badge (ex: LADY)</label>
+                                                                <input 
+                                                                    value={accueilSettings.welcomeBadgeText} 
+                                                                    onChange={e => updateAccueilField('welcomeBadgeText', e.target.value)}
+                                                                    className="w-full bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 focus:border-indigo-400 outline-none font-black text-[10px] uppercase" 
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Lien du bouton</label>
+                                                            <input 
+                                                                value={accueilSettings.welcomeBtnLink} 
+                                                                onChange={e => updateAccueilField('welcomeBtnLink', e.target.value)}
+                                                                className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 focus:border-indigo-400 outline-none font-bold text-[10px] text-slate-400" 
+                                                                placeholder="/produits or URL"
+                                                            />
+                                                        </div>
+                                                        
+                                                        {/* Preview */}
+                                                        <div>
+                                                            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1 mb-1.5 block">Aperçu direct</label>
+                                                                <div 
+                                                                    className="p-5 rounded-2xl shadow-lg relative overflow-hidden h-[160px] flex items-center"
+                                                                    style={{ 
+                                                                        background: accueilSettings.welcomeBgColor 
+                                                                            ? `linear-gradient(120deg, ${accueilSettings.welcomeBgColor} 0%, ${accueilSettings.welcomeBgColor}CC 100%)` 
+                                                                            : 'linear-gradient(120deg, #f0fdf4 0%, #dcfce7 100%)',
+                                                                    }}
+                                                                >
+                                                                    {accueilSettings.welcomeImage && (
+                                                                        <div 
+                                                                            className="absolute inset-y-0 right-0 z-0 opacity-100 w-2/3" 
+                                                                            style={{
+                                                                                backgroundImage: `url(${accueilSettings.welcomeImage})`,
+                                                                                backgroundSize: 'contain',
+                                                                                backgroundPosition: 'right bottom',
+                                                                                backgroundRepeat: 'no-repeat'
+                                                                            }}
+                                                                        />
+                                                                    )}
+                                                                    {accueilSettings.welcomeImage && (
+                                                                        <div 
+                                                                            className="absolute inset-0 z-0 pointer-events-none"
+                                                                            style={{
+                                                                                background: `linear-gradient(to right, ${accueilSettings.welcomeBgColor || '#f0fdf4'} 45%, ${accueilSettings.welcomeBgColor ? accueilSettings.welcomeBgColor + '88' : 'transparent'} 75%, transparent 100%)`
+                                                                            }}
+                                                                        />
+                                                                    )}
+                                                                    <div className="relative z-10 w-full flex justify-between items-center">
+                                                                        <div className="max-w-[70%]">
+                                                                            <h4 className="text-white !text-white font-black text-[12px] whitespace-pre-line leading-tight mb-1 drop-shadow-sm">{accueilSettings.welcomeTitle}</h4>
+                                                                            <p className="text-white/80 !text-white/80 font-bold text-[8px] uppercase tracking-widest mb-3 drop-shadow-sm">{accueilSettings.welcomeSubtitle}</p>
+                                                                            <span className="bg-emerald-500 text-white text-[8px] font-black py-1.5 px-4 rounded-full shadow-lg shadow-emerald-500/30 uppercase">{accueilSettings.welcomeBtnText}</span>
+                                                                        </div>
+                                                                        <div className="w-12 h-12 rounded-full border border-white/30 flex items-center justify-center bg-white/10 backdrop-blur-md shrink-0 ml-4">
+                                                                            <span className="text-[9px] text-white !text-white font-black drop-shadow-sm">{accueilSettings.welcomeBadgeText}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <button 
-                                                onClick={() => handleDeleteNotification(n.id)}
-                                                className="p-4 rounded-2xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                                            >
-                                                <Trash2 size={24} />
-                                            </button>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
 
-                    {activeTab === "services" && (
-                        <motion.div key="services" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-14">
-                                <div>
-                                    <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">Nos Expertises</h1>
-                                    <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-purple-100 underline-offset-4 text-xs md:text-base">Gérez les services et expertises du Djapero Group.</p>
-                                </div>
-                                <button onClick={() => {
-                                    setServiceModal({});
-                                    setPreviewUrl("");
-                                }} className="bg-[#10b981] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase tracking-tighter hover:bg-emerald-700 transition-all shadow-xl hover:scale-105 text-xs md:text-sm uppercase w-full md:w-auto"><Plus size={20} className="inline-block mr-2" /> Ajouter un service</button>
-                            </div>
-                            <div className="admin-product-grid">
-                                {(data.services || []).map(s => (
-                                    <div key={s.id} className="admin-product-card group bg-white">
-                                         <div className="h-48 overflow-hidden relative p-8 flex items-center justify-center bg-emerald-50/30">
-                                             <img src={s.imageUrl || undefined} className="h-full w-full object-contain group-hover:scale-110 transition-transform duration-700"/>
-                                         </div>
-                                         <div className="p-6">
-                                             <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">{s.category}</div>
-                                             <h3 className="font-black text-lg text-[#0f172a] truncate uppercase tracking-tighter mb-4">{s.name}</h3>
-                                             <div className="flex gap-2">
-                                                <button onClick={() => {
-                                                    setServiceModal(s);
-                                                    setPreviewUrl(s.imageUrl || "");
-                                                }} className="flex-1 py-3 bg-gray-50 text-gray-700 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#10b981] hover:text-white transition-all">Modifier</button>
-                                                <button onClick={async () => { if(confirm("Supprimer ?")) await deleteService(s.id) }} className="p-3 text-red-400 bg-red-50 hover:bg-red-600 hover:text-white rounded-xl transition-all"><Trash2 size={18}/></button>
-                                             </div>
-                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {activeTab === "membres" && (
-                        <motion.div key="membres" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 md:mb-14">
-                                <div>
-                                    <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] uppercase tracking-tighter leading-none">Membres & Partenaires</h1>
-                                    <p className="text-gray-400 font-bold mt-2 opacity-80 underline decoration-emerald-100 underline-offset-4 text-xs md:text-base">Liste des personnes ayant créé un profil sur la plateforme.</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {(data.users || []).length === 0 ? (
-                                    <div className="col-span-full bg-white p-12 rounded-[2rem] border border-dashed border-gray-200 text-center">
-                                        <Users className="mx-auto text-gray-200 mb-4" size={64} />
-                                        <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">Aucun membre enregistré</p>
-                                    </div>
-                                ) : (
-                                    (data.users || []).map(u => (
-                                        <div key={u.uid} className="bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 relative overflow-hidden group">
-                                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[4rem] -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-                                            <div className="relative z-10">
-                                                <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-100/50">
-                                                    <User size={32} className="text-emerald-600" />
-                                                </div>
-                                                <h3 className="text-2xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-1">{u.fullName}</h3>
-                                                <div className="flex flex-wrap gap-2 mb-4">
-                                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-100 rounded-lg text-emerald-600">
-                                                        <ShieldCheck size={12} />
-                                                        <span className="text-[9px] font-black uppercase tracking-widest">{u.role}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 rounded-lg text-gray-500">
-                                                        <Briefcase size={12} />
-                                                        <span className="text-[9px] font-black uppercase tracking-widest">{u.occupation}</span>
-                                                    </div>
+                                            {/* Animation Images Uploads */}
+                                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-50 space-y-6 mt-8">
+                                                <div className="border-b border-slate-100 pb-4 mb-4">
+                                                    <h3 className="text-lg font-black text-indigo-600 uppercase tracking-wider">Images Animation D'Inscription</h3>
+                                                    <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">Personnalisez les 5 cartes de l'animation</p>
                                                 </div>
                                                 
-                                                <div className="space-y-2 pt-4 border-t border-gray-50">
-                                                    <div className="flex items-center gap-3 group/item">
-                                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 group-hover/item:bg-emerald-50 group-hover/item:text-emerald-500 transition-colors">
-                                                            <Mail size={14} />
+                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                                    {/* Card 1: Catalogue */}
+                                                    <div className="space-y-1.5 flex flex-col items-center">
+                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Catalogue</label>
+                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
+                                                            {accueilSettings.animCatalogImage ? (
+                                                                <img src={accueilSettings.animCatalogImage} className="w-full h-full object-cover" alt="Catalog Anim" />
+                                                            ) : (
+                                                                <ImageIcon className="text-slate-300" size={24} />
+                                                            )}
+                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animCat')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
                                                         </div>
-                                                        <span className="text-xs font-bold text-gray-500 truncate">{u.email}</span>
+                                                        {accueilSettings.animCatalogImage && (
+                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animCatalogImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
+                                                        )}
                                                     </div>
-                                                    <div className="flex items-center gap-3 group/item">
-                                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 group-hover/item:bg-emerald-50 group-hover/item:text-emerald-500 transition-colors">
-                                                            <Phone size={14} />
+                                                    
+                                                    {/* Card 2: Marche */}
+                                                    <div className="space-y-1.5 flex flex-col items-center">
+                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Marché</label>
+                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
+                                                            {accueilSettings.animMarketImage ? (
+                                                                <img src={accueilSettings.animMarketImage} className="w-full h-full object-cover" alt="Market Anim" />
+                                                            ) : (
+                                                                <ImageIcon className="text-slate-300" size={24} />
+                                                            )}
+                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animMarche')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
                                                         </div>
-                                                        <span className="text-xs font-bold text-gray-500">{u.phone || "Non spécifié"}</span>
+                                                        {accueilSettings.animMarketImage && (
+                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animMarketImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
+                                                        )}
                                                     </div>
-                                                    <div className="flex items-center gap-3 group/item">
-                                                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 group-hover/item:bg-emerald-50 group-hover/item:text-emerald-500 transition-colors">
-                                                            <MapPin size={14} />
+
+                                                    {/* Card 3: Livraison */}
+                                                    <div className="space-y-1.5 flex flex-col items-center">
+                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Livraison</label>
+                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
+                                                            {accueilSettings.animDeliveryImage ? (
+                                                                <img src={accueilSettings.animDeliveryImage} className="w-full h-full object-cover" alt="Delivery Anim" />
+                                                            ) : (
+                                                                <ImageIcon className="text-slate-300" size={24} />
+                                                            )}
+                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animLiv')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
                                                         </div>
-                                                        <span className="text-xs font-bold text-gray-500">{u.city || "Non spécifié"}</span>
+                                                        {accueilSettings.animDeliveryImage && (
+                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animDeliveryImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Card 4: Services */}
+                                                    <div className="space-y-1.5 flex flex-col items-center">
+                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Services</label>
+                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
+                                                            {accueilSettings.animServicesImage ? (
+                                                                <img src={accueilSettings.animServicesImage} className="w-full h-full object-cover" alt="Services Anim" />
+                                                            ) : (
+                                                                <ImageIcon className="text-slate-300" size={24} />
+                                                            )}
+                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animServ')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
+                                                        </div>
+                                                        {accueilSettings.animServicesImage && (
+                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animServicesImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Card 5: Equipe */}
+                                                    <div className="space-y-1.5 flex flex-col items-center">
+                                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Équipe</label>
+                                                        <div className="w-full aspect-[4/5] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 relative overflow-hidden group cursor-pointer flex items-center justify-center">
+                                                            {accueilSettings.animTeamImage ? (
+                                                                <img src={accueilSettings.animTeamImage} className="w-full h-full object-cover" alt="Team Anim" />
+                                                            ) : (
+                                                                <ImageIcon className="text-slate-300" size={24} />
+                                                            )}
+                                                            <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'animEquipe')} className="absolute inset-0 opacity-0 cursor-pointer object-cover" />
+                                                        </div>
+                                                        {accueilSettings.animTeamImage && (
+                                                            <button type="button" onClick={() => setAccueilSettings(prev => ({ ...prev, animTeamImage: "" }))} className="text-red-400 text-[10px] font-bold mt-1 uppercase hover:text-red-500">Effacer</button>
+                                                        )}
                                                     </div>
                                                 </div>
+                                            </div>
 
-                                                {u.about && (
-                                                    <div className="mt-4 p-3 bg-gray-50 rounded-xl relative">
-                                                        <p className="text-[10px] text-gray-400 italic line-clamp-2">"{u.about}"</p>
+                                                <div className="flex flex-col items-center pt-2 relative">
+                                                    <button type="submit" disabled={isSaving} className="w-fit px-8 bg-indigo-600 text-white h-8 rounded-full font-black uppercase tracking-widest text-[8px] shadow-lg shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                                        {isSaving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={12} />}
+                                                        <span>PUBLIER</span>
+                                                    </button>
+                                                    
+                                                    <AnimatePresence>
+                                                        {showSuccess && (
+                                                            <motion.div 
+                                                                initial={{ opacity: 0, y: 10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                exit={{ opacity: 0 }}
+                                                                className="mt-1.5 text-emerald-500 text-[8px] font-black uppercase tracking-widest"
+                                                            >
+                                                                ✓ Mise à jour réussie
+                                                            </motion.div>
+                                                        )}
+                                                        {saveError && (
+                                                            <motion.div 
+                                                                initial={{ opacity: 0, y: 10 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                exit={{ opacity: 0 }}
+                                                                className="mt-1.5 text-red-500 text-[8px] font-black uppercase tracking-widest"
+                                                            >
+                                                                ⚠️ {saveError}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                        </form>
+
+                                        {/* Affiches Latérales (Ads) */}
+                                        <div className="mt-12">
+                                            <div className="flex items-center justify-between mb-6">
+                                                <div>
+                                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Affiches Latérales</h3>
+                                                    <p className="text-slate-500 font-bold mt-1 text-[10px] uppercase tracking-widest">Affichez des promos sur le côté (2 max. visibles sur l'accueil)</p>
+                                                </div>
+                                                <button 
+                                                    onClick={() => { setAdForm({ title: "", subtitle: "", price: "", imageUrl: "", link: "", active: true }); setEditingId(null); setShowAddModal(true); }}
+                                                    className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-lg shadow-slate-900/20"
+                                                >
+                                                    <Plus size={20} />
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {appData.ads?.map(ad => (
+                                                    <div key={ad.id} className="bg-white p-4 rounded-3xl shadow-sm border border-slate-50 relative group">
+                                                        <div className="flex gap-4">
+                                                            <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-inner bg-slate-50 shrink-0 relative">
+                                                                <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover" />
+                                                            </div>
+                                                            <div className="flex-1 py-1 pr-6">
+                                                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-tight mb-0.5">{ad.subtitle}</p>
+                                                                <h4 className="font-black text-slate-800 leading-tight">{ad.title}</h4>
+                                                                {ad.price && <p className="text-sm font-bold text-slate-500 mt-1">{ad.price}</p>}
+                                                            </div>
+                                                        </div>
+                                                        <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => deleteAd(ad.id)} className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors">
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {(!appData.ads || appData.ads.length === 0) && (
+                                                    <div className="col-span-1 sm:col-span-2 p-8 text-center border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                                                        Aucune affiche latérale n'a été ajoutée
                                                     </div>
                                                 )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
-                                                <div className="mt-8 flex justify-between items-center">
-                                                    <span className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Inscrit le {u.completedAt ? (typeof u.completedAt === 'number' ? new Date(u.completedAt).toLocaleDateString() : (u.completedAt as any).toDate?.().toLocaleDateString() || "...") : "..."}</span>
-                                                    <div className="flex items-center gap-2 text-emerald-500">
-                                                        <span className="text-[9px] font-black uppercase tracking-widest">Actif</span>
-                                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                                    </div>
+                                {activeTab === "accueil" && (
+                                    <div className="space-y-8">
+                                        <div className="flex items-end justify-between">
+                                            <div>
+                                                <h1 className="text-4xl font-black text-slate-800 tracking-tighter uppercase">Documents</h1>
+                                                <p className="text-slate-500 font-bold mt-1 uppercase tracking-widest text-[10px]">Statistiques Globales</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-400">
+                                                <span>Nom</span>
+                                                <div className="flex flex-col -space-y-1">
+                                                    <Plus className="rotate-45" size={12} />
                                                 </div>
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
 
-                    {activeTab === "parametres" && (
-                        <motion.div key="parametres" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                            <div className="mb-10 md:mb-14">
-                                <h1 className="text-3xl md:text-5xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-4">Configuration</h1>
-                                <p className="text-gray-400 font-bold text-base md:text-lg opacity-80">Gérez les informations de contact et les éléments visuels globaux.</p>
-                            </div>
-
-                            <div className="max-w-3xl bg-white p-6 md:p-12 rounded-[2rem] md:rounded-[3rem] shadow-2xl border border-gray-100 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[5rem] -mr-10 -mt-10" />
-                                <form className="space-y-10 relative z-10" onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    const formData = new FormData(e.currentTarget);
-                                    const success = await updateSettings({
-                                        ...data.settings,
-                                        whatsapp: formData.get("whatsapp") as string,
-                                        call: formData.get("call") as string,
-                                        publicityVideoId: formData.get("publicityVideoId") as string,
-                                        publicityTitle: formData.get("publicityTitle") as string,
-                                        publicitySubtitle: formData.get("publicitySubtitle") as string,
-                                        adminCustomCode: formData.get("adminCustomCode") as string,
-                                    });
-                                    if (success) {
-                                        alert("Paramètres enregistrées avec succès !");
-                                    }
-                                }}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Numéro WhatsApp</label>
-                                            <input name="whatsapp" defaultValue={data.settings.whatsapp} className="admin-input-refined" placeholder="228XXXXXXXX" />
-                                        </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Téléphone d'Appel</label>
-                                            <input name="call" defaultValue={data.settings.call} className="admin-input-refined" placeholder="+228 92..." />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-6 pt-10 border-t border-gray-100">
-                                        <div>
-                                            <h3 className="text-xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-2 underline decoration-emerald-500 underline-offset-4">Publicité Vidéo Principale</h3>
-                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest opacity-80">Configurez la vidéo mise en avant sur la page d'accueil.</p>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="space-y-3">
-                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">ID Vidéo YouTube / FB</label>
-                                                <input name="publicityVideoId" defaultValue={data.settings.publicityVideoId} className="admin-input-refined" placeholder="ID de la vidéo" />
-                                            </div>
-                                            <div className="space-y-3">
-                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Titre Publicité</label>
-                                                <input name="publicityTitle" defaultValue={data.settings.publicityTitle} className="admin-input-refined" placeholder="Titre accrocheur" />
-                                            </div>
-                                            <div className="col-span-full space-y-3">
-                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">Sous-titre / Description</label>
-                                                <textarea name="publicitySubtitle" defaultValue={data.settings.publicitySubtitle} className="admin-input-refined h-20 py-4" placeholder="Plus de détails..." />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Login Backgrounds Section */}
-                                    <div className="space-y-6 pt-10 border-t border-gray-100">
-                                        <div>
-                                            <h3 className="text-xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-2 underline decoration-emerald-500 underline-offset-4">Fonds de Page de Connexion</h3>
-                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest opacity-80">Gérez les images qui défilent en arrière-plan à l'entrée.</p>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            {(accueilSettings.authBackgrounds || []).map((bg, idx) => (
-                                                <div key={idx} className="flex flex-col md:flex-row gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 items-start md:items-center group">
-                                                    <div className="w-full md:w-32 h-20 bg-gray-200 rounded-xl overflow-hidden shadow-sm shrink-0">
-                                                        <img src={bg.url} alt="BG" className="w-full h-full object-cover" />
+                                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            {[
+                                                { label: "Ventes", value: "1,200 €", bgColor: "bg-indigo-50", textColor: "text-indigo-600", icon: ShoppingBag },
+                                                { label: "Visites", value: stats.totalVisits.toString(), bgColor: "bg-purple-50", textColor: "text-purple-600", icon: Eye },
+                                                { label: "Produits", value: appData.products.length.toString(), bgColor: "bg-pink-50", textColor: "text-pink-600", icon: StoreIcon },
+                                                { label: "Messages", value: stats.unreadMessages.toString(), bgColor: "bg-rose-50", textColor: "text-rose-600", icon: Mail },
+                                            ].map((stat, i) => (
+                                                <div key={i} className="bg-white p-4 rounded-3xl shadow-sm hover:shadow-md transition-all border border-slate-50 group">
+                                                    <div className={`w-8 h-8 rounded-xl ${stat.bgColor} ${stat.textColor} flex items-center justify-center mb-3 transition-colors`}>
+                                                        <stat.icon size={16} />
                                                     </div>
-                                                    <div className="flex-1 space-y-2 w-full">
-                                                        <input 
-                                                            className="w-full bg-white px-4 py-2 rounded-lg border border-transparent focus:border-emerald-500 outline-none font-bold text-sm tracking-tighter"
-                                                            value={bg.label}
-                                                            onChange={(e) => {
-                                                                const newBgs = [...(accueilSettings.authBackgrounds || [])];
-                                                                newBgs[idx] = { ...bg, label: e.target.value };
-                                                                setAccueilSettings({ ...accueilSettings, authBackgrounds: newBgs });
-                                                            }}
-                                                            placeholder="Libellé (ex: USINE // TRANSFORMATION)"
-                                                        />
-                                                        <input 
-                                                            className="w-full bg-white px-4 py-2 rounded-lg border border-transparent focus:border-emerald-500 outline-none font-medium text-[10px] text-gray-400"
-                                                            value={bg.url}
-                                                            onChange={(e) => {
-                                                                const newBgs = [...(accueilSettings.authBackgrounds || [])];
-                                                                newBgs[idx] = { ...bg, url: e.target.value };
-                                                                setAccueilSettings({ ...accueilSettings, authBackgrounds: newBgs });
-                                                            }}
-                                                            placeholder="URL de l'image"
-                                                        />
-                                                    </div>
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const newBgs = (accueilSettings.authBackgrounds || []).filter((_, i) => i !== idx);
-                                                            setAccueilSettings({ ...accueilSettings, authBackgrounds: newBgs });
-                                                        }}
-                                                        className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all self-end md:self-center"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
+                                                    <p className="text-lg font-black text-slate-800">{stat.value}</p>
+                                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{stat.label}</p>
                                                 </div>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
 
-                                            {/* Add New Background */}
-                                            <div className="p-6 border-2 border-dashed border-emerald-100 rounded-3xl bg-emerald-50/20 flex flex-col items-center gap-4 group hover:bg-emerald-50/40 transition-all">
-                                                <div className="flex items-center gap-4 w-full">
-                                                    <div className="flex-1">
-                                                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 ml-2">Nouvelle Image de Fond</p>
-                                                        <div className="flex gap-4">
-                                                            <button 
-                                                                type="button"
-                                                                onClick={async () => {
-                                                                    const input = document.createElement('input');
-                                                                    input.type = 'file';
-                                                                    input.accept = 'image/*';
-                                                                    input.onchange = async (e) => {
-                                                                        const file = (e.target as HTMLInputElement).files?.[0];
-                                                                        if (file) {
-                                                                            const url = await handleFileUpload(file);
-                                                                            if (url) {
-                                                                                const newBgs = [...(accueilSettings.authBackgrounds || []), { url, label: "NOUVELLE IMAGE" }];
-                                                                                setAccueilSettings({ ...accueilSettings, authBackgrounds: newBgs });
-                                                                            }
-                                                                        }
-                                                                    };
-                                                                    input.click();
-                                                                }}
-                                                                disabled={uploading}
-                                                                className="flex-[2] bg-emerald-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
-                                                            >
-                                                                <CloudUpload size={18} /> {uploading ? "Chargement..." : "Charger Image"}
+                                {activeTab === "produits" && (
+                                    <div className="space-y-8">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Catalogue</h2>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                                            {appData.products.map((product) => (
+                                                <div key={product.id} className="bg-white p-6 rounded-[2.8rem] shadow-sm border border-slate-50 group hover:-translate-y-2 transition-all flex flex-col hover:shadow-xl hover:shadow-indigo-500/5">
+                                                    <div className="aspect-square bg-white rounded-[2.2rem] mb-6 overflow-hidden relative border border-slate-100/50">
+                                                        <img src={product.imageUrl || "https://picsum.photos/seed/400/400"} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                                                        <div className="absolute top-4 right-4">
+                                                            <span className="bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[11px] font-black text-indigo-600 shadow-sm border border-white/40">{product.price}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex-1 px-2">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <h3 className="font-black text-slate-800 truncate text-sm uppercase tracking-tight">{product.name}</h3>
+                                                            <button onClick={() => deleteProduct(product.id)} className="text-red-400 hover:text-red-600 transition-all p-1.5 bg-red-50 rounded-xl hover:scale-110">
+                                                                 <Trash2 size={16} />
                                                             </button>
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const url = prompt("Lien direct de l'image (https://...)");
-                                                                    if (url) {
-                                                                        const newBgs = [...(accueilSettings.authBackgrounds || []), { url, label: "IMAGE EXTERNE" }];
-                                                                        setAccueilSettings({ ...accueilSettings, authBackgrounds: newBgs });
-                                                                    }
-                                                                }}
-                                                                className="flex-1 bg-white border border-emerald-200 text-emerald-600 py-4 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-emerald-50 transition-all"
-                                                            >
-                                                                Lien Direct
-                                                            </button>
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">{product.category}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === "parametres" && (
+                                    <div className="max-w-4xl">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter mb-8">Configuration</h2>
+                                        <form className="space-y-6" onSubmit={handleAccueilSubmit}>
+                                            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-50 space-y-8">
+                                                <div className="border-b border-slate-100 pb-4">
+                                                    <h3 className="text-lg font-black text-indigo-600 uppercase tracking-wider">A & Titres</h3>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                    <div className="space-y-6">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-2">Titre Hero Principal</label>
+                                                            <input 
+                                                                value={accueilSettings.heroTitle} 
+                                                                onChange={e => updateAccueilField('heroTitle', e.target.value)}
+                                                                className="w-full bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 focus:border-indigo-400 outline-none font-black uppercase tracking-tighter transition-all" 
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-2">Sous-titre Hero</label>
+                                                            <input 
+                                                                value={accueilSettings.heroSubtitle} 
+                                                                onChange={e => updateAccueilField('heroSubtitle', e.target.value)}
+                                                                className="w-full bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 focus:border-indigo-400 outline-none font-bold text-xs uppercase tracking-widest text-slate-500" 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-6">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-2">Studio</label>
+                                                            <input 
+                                                                value={accueilSettings.bannerTitle} 
+                                                                onChange={e => updateAccueilField('bannerTitle', e.target.value)}
+                                                                className="w-full bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 focus:border-indigo-400 outline-none font-black uppercase tracking-tighter" 
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-2">Description</label>
+                                                            <textarea 
+                                                                value={accueilSettings.bannerDesc} 
+                                                                onChange={e => updateAccueilField('bannerDesc', e.target.value)}
+                                                                rows={3} 
+                                                                className="w-full bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 focus:border-indigo-400 outline-none font-bold text-xs text-slate-400" 
+                                                            />
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
+                                            <div className="flex flex-col items-center pt-2 relative">
+                                                <button type="submit" disabled={isSaving} className="w-fit min-w-[200px] px-6 bg-indigo-600 text-white h-9 rounded-full font-black uppercase tracking-widest text-[8px] shadow-lg shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                                    {isSaving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={12} />}
+                                                    <span>SAUVEGARDER CONFIG</span>
+                                                </button>
+                                                
+                                                <AnimatePresence>
+                                                    {showSuccess && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, y: 10 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0 }}
+                                                            className="mt-2 text-emerald-500 text-[8px] font-black uppercase tracking-widest"
+                                                        >
+                                                            ✓ Configuration enregistrée
+                                                        </motion.div>
+                                                    )}
+                                                    {saveError && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, y: 10 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0 }}
+                                                            className="mt-2 text-red-500 text-[8px] font-black uppercase tracking-widest"
+                                                        >
+                                                            ⚠️ {saveError}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        </form>
+                                    </div>
+                                )}
+
+                                {activeTab === "marche" && (
+                                    <div className="space-y-8">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Marché Local</h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                            {appData.marketItems.map(item => (
+                                                <div key={item.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-50 group transition-all hover:shadow-xl hover:shadow-emerald-500/5 flex flex-col">
+                                                    <div className="aspect-square bg-slate-50 rounded-[2rem] mb-6 overflow-hidden relative border border-slate-100">
+                                                        <img src={item.imageUrl || "https://picsum.photos/seed/market/400/225"} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                                                        <div className="absolute top-4 right-4">
+                                                            <span className="bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[11px] font-black text-emerald-600 shadow-sm border border-white/40">{item.price}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex justify-between items-start flex-1 px-2">
+                                                        <div className="max-w-[80%]">
+                                                            <h3 className="text-lg font-black text-slate-800 mb-1 truncate uppercase tracking-tight">{item.name}</h3>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{item.shopName} • {item.location}</p>
+                                                        </div>
+                                                        <button onClick={() => deleteMarketItem(item.id)} className="text-red-400 hover:text-red-600 p-2.5 bg-red-50 rounded-xl transition-all hover:scale-110">
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
+                                )}
 
-                                    <div className="space-y-6 pt-10 border-t border-gray-100">
-                                        <div>
-                                            <h3 className="text-xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-2 underline decoration-emerald-500 underline-offset-4">Code Personnalisé</h3>
-                                            <p className="text-gray-400 font-bold text-xs uppercase tracking-widest opacity-80">Ajoutez du code (HTML, CSS avec balises &lt;style&gt;, ou scripts) pour transformer globalement cette page d'administration.</p>
-                                        </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#10b981] ml-2 block">HTML / CSS de l'Interface</label>
-                                            <textarea 
-                                                name="adminCustomCode" 
-                                                defaultValue={data.settings.adminCustomCode} 
-                                                spellCheck={false}
-                                                className="w-full bg-[#0f172a] text-emerald-400 border border-transparent focus:border-[#10b981] rounded-2xl px-6 py-6 outline-none font-mono text-sm transition-all h-[400px] leading-relaxed shadow-inner" 
-                                                placeholder="<!-- Écrivez votre code ici -->&#10;<style>&#10;  body { background: white; }&#10;</style>&#10;<div>Mon Dashboard Custom</div>" 
-                                            />
+                                {activeTab === "videos" && (
+                                    <div className="space-y-8">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Médiathèque</h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {appData.videos.map(video => (
+                                                <div key={video.id} className="bg-white p-4 lg:p-6 rounded-[2rem] shadow-sm border border-slate-50 relative group">
+                                                    <div className="aspect-video bg-black rounded-2xl mb-4 flex items-center justify-center overflow-hidden relative shadow-inner">
+                                                        {video.thumbnail ? (
+                                                            <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover opacity-50" />
+                                                        ) : (
+                                                            <VideoIcon className="text-white/20" size={48} />
+                                                        )}
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 flex flex-col justify-end z-20">
+                                                            <h3 className="text-white font-black text-lg uppercase tracking-tighter leading-tight drop-shadow-md truncate">
+                                                                {video.title}
+                                                            </h3>
+                                                            {video.caption && <p className="text-white/80 text-[10px] font-bold mt-1 line-clamp-2 leading-tight">{video.caption}</p>}
+                                                        </div>
+                                                        <div className="absolute inset-0 flex items-center justify-center z-10">
+                                                            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white transform group-hover:scale-110 transition-transform">
+                                                                <VideoIcon size={24} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex justify-between items-center px-1">
+                                                        <div className="flex-1 min-w-0 pr-4">
+                                                            <h3 className="text-sm font-bold text-slate-800 truncate">{video.title}</h3>
+                                                            {video.srcType && <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{video.srcType}</p>}
+                                                        </div>
+                                                        <button onClick={() => deleteVideo(video.id)} className="w-10 h-10 rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-colors flex-shrink-0">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
+                                )}
 
-                                    <button type="submit" className="w-full bg-[#0f172a] text-white py-6 rounded-2xl font-black uppercase tracking-widest hover:bg-[#10b981] transition-all flex items-center justify-center gap-4 shadow-xl transform hover:scale-[1.02] active:scale-95 group mb-4">
-                                        <Save size={24} className="group-hover:rotate-12 transition-transform" /> Enregistrer les Paramètres
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        onClick={async () => {
-                                            const jsonString = JSON.stringify(data, null, 2);
-                                            const blob = new Blob([jsonString], { type: "application/json" });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement("a");
-                                            a.href = url;
-                                            a.download = `djapero-backup-${new Date().toISOString().split('T')[0]}.json`;
-                                            a.click();
-                                        }}
-                                        className="w-full bg-gray-50 text-gray-400 py-4 rounded-xl font-black uppercase tracking-tighter text-[10px] hover:bg-gray-100 transition-all border border-dashed border-gray-200"
-                                    >
-                                        Générer un Backup (JSON)
-                                    </button>
-                                </form>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                                {activeTab === "notifications" && (
+                                    <div className="space-y-8">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Alertes & Notifications</h2>
+                                        <div className="space-y-4">
+                                            {appData.notifications.length > 0 ? appData.notifications.map(notif => (
+                                                <div key={notif.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-50 flex items-center gap-4">
+                                                     <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                                                        <Bell size={20} />
+                                                     </div>
+                                                     <div className="flex-1">
+                                                         <h3 className="font-bold text-slate-800">{notif.title}</h3>
+                                                         <p className="text-sm text-slate-400">{notif.message}</p>
+                                                     </div>
+                                                </div>
+                                            )) : (
+                                                <div className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest text-sm">Aucune notification</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
+                                {activeTab === "team" && (
+                                    <div className="space-y-8">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Gestion de l'Équipe</h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {appData.team.map(member => (
+                                                <div key={member.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-50 group hover:shadow-md transition-all text-center">
+                                                    <div className="relative w-24 h-24 mx-auto mb-4">
+                                                        <img src={member.img || "https://randomuser.me/api/portraits/lego/1.jpg"} alt={member.name} className="w-full h-full object-cover rounded-full border-4 border-slate-50" />
+                                                    </div>
+                                                    <h3 className="text-lg font-black text-slate-800">{member.name}</h3>
+                                                    <p className="text-indigo-600 font-bold text-xs uppercase tracking-widest mb-1">{member.role}</p>
+                                                    {member.prestations && member.prestations.length > 0 && (
+                                                        <div className="flex flex-wrap justify-center gap-1 mt-2">
+                                                            {member.prestations.map((p, idx) => (
+                                                                <span key={idx} className="text-[8px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full uppercase truncate max-w-[80px]">
+                                                                    {p}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <div className="mt-4 flex items-center justify-center gap-3">
+                                                        <button 
+                                                            onClick={() => handleEditTeam(member)}
+                                                            className="text-indigo-500 hover:text-indigo-700 flex items-center gap-1 font-bold text-[10px] uppercase tracking-widest"
+                                                        >
+                                                            Modifier
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => deleteTeamMember(member.id)} 
+                                                            className="text-red-400 hover:text-red-500 flex items-center gap-1 font-bold text-[10px] uppercase tracking-widest"
+                                                        >
+                                                            <Trash2 size={14} /> Supprimer
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === "visiteurs" && (
+                                    <div className="space-y-8">
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Historique des Visites</h2>
+                                                <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Les 50 dernières activités</p>
+                                            </div>
+                                            <div className="flex gap-4">
+                                                <div className="bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm text-center">
+                                                    <p className="text-xs font-bold text-slate-400 uppercase">Unique</p>
+                                                    <p className="text-xl font-black text-indigo-600">{stats.uniqueVisitors}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-50 overflow-hidden">
+                                            <table className="w-full text-left">
+                                                <thead>
+                                                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                                                        <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Utilisateur / Browser</th>
+                                                        <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Page</th>
+                                                        <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Date & Heure</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-50">
+                                                    {visits.map((visit) => (
+                                                        <tr key={visit.id} className="hover:bg-slate-50/30 transition-colors">
+                                                            <td className="px-8 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                                                        <Users size={14} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-bold text-slate-700 truncate max-w-[200px]">{visit.email || "Visiteur Anonyme"}</p>
+                                                                        <p className="text-[10px] text-slate-400 truncate max-w-[200px] text-wrap">{visit.userAgent}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-8 py-4">
+                                                                <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black uppercase text-slate-500 tracking-widest">{visit.path}</span>
+                                                            </td>
+                                                            <td className="px-8 py-4">
+                                                                <div className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-tight">
+                                                                    <Calendar size={12} />
+                                                                    {new Date(visit.createdAt).toLocaleString('fr-FR')}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === "messages" && (
+                                    <div className="space-y-8 text-slate-800">
+                                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Messagerie Directe</h2>
+                                        
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {messages.length > 0 ? messages.map((m) => (
+                                                <div key={m.id} className={`bg-white p-8 rounded-[2.5rem] shadow-sm border ${m.isRead ? 'border-slate-50' : 'border-indigo-200 ring-2 ring-indigo-500/5'} transition-all`}>
+                                                    <div className="flex justify-between items-start mb-6">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${m.isRead ? 'bg-slate-50 text-slate-400' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100'}`}>
+                                                                <Mail size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-lg font-black tracking-tight">{m.name}</h3>
+                                                                <p className="text-xs font-bold text-indigo-600">{m.phone || m.email}</p>
+                                                                <p className="text-[10px] text-slate-400">{m.service && `Service: ${m.service}`}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            {!m.isRead && (
+                                                                <button 
+                                                                   onClick={() => markAsRead(m.id)}
+                                                                   className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-colors"
+                                                               >
+                                                                   <CheckCircle size={14} /> Lu
+                                                               </button>
+                                                            )}
+                                                            <button 
+                                                               onClick={() => deleteMessage(m.id)}
+                                                               className="p-2.5 text-slate-300 hover:text-red-500 transition-colors"
+                                                            >
+                                                                <Trash2 size={20} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="pl-16">
+                                                        <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 mb-4">
+                                                            <p className="text-slate-600 font-medium leading-relaxed">{m.message}</p>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                                                                <Clock size={12} />
+                                                                Reçu le {new Date(m.createdAt).toLocaleString('fr-FR')}
+                                                            </div>
+                                                            {(m.phone || m.email) && (
+                                                                <a 
+                                                                    href={`https://wa.me/${m.phone?.replace(/[^0-9]/g, '') || ''}?text=Bonjour ${m.name}, je reviens vers vous concernant votre message sur Djapero.`}
+                                                                    target="_blank"
+                                                                    className="flex items-center gap-2 px-4 py-2 bg-[#25D366] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-[#25D366]/20"
+                                                                >
+                                                                    <MessageSquare size={14} /> Répondre
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )) : (
+                                                <div className="p-20 text-center">
+                                                    <MessageSquare className="mx-auto text-slate-100 mb-4" size={64} />
+                                                    <p className="text-slate-400 font-black uppercase tracking-widest text-sm">Votre boîte de réception est vide</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+                </main>
+
+                {/* Add Modal */}
                 <AnimatePresence>
-                    {selectedDetail && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+                    {showAddModal && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                             <motion.div 
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
-                                onClick={() => setSelectedDetail(null)}
-                                className="absolute inset-0 bg-[#0f172a]/80 backdrop-blur-md"
+                                onClick={() => setShowAddModal(false)}
+                                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                             />
-                            
                             <motion.div 
-                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                                className="relative w-full max-w-5xl bg-white rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh] z-10"
+                                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                className="relative w-[95%] max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
                             >
-                                <button 
-                                    onClick={() => setSelectedDetail(null)}
-                                    className="absolute top-6 right-6 z-50 p-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-colors"
-                                >
-                                    <X size={24} className="text-gray-900" />
-                                </button>
-
-                                {/* Left Side: Image */}
-                                <div className="w-full md:w-1/2 bg-[#f8fafc] p-6 md:p-14 flex items-center justify-center relative">
-                                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/20 to-transparent" />
-                                    <motion.img 
-                                        src={selectedDetail.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
-                                        alt={selectedDetail.name}
-                                        className="max-w-[85%] max-h-[85%] object-contain drop-shadow-[0_30px_60px_rgba(16,185,129,0.2)]"
-                                        initial={{ scale: 0.8, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        transition={{ type: "spring", damping: 15 }}
-                                    />
+                                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-50/20">
+                                    <div className="leading-tight">
+                                        <h2 className="text-lg font-black text-slate-800 uppercase tracking-tighter">{editingId ? "Modifier" : "Publier"}</h2>
+                                        <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest mt-0.5">Section: {activeTab}</p>
+                                    </div>
+                                    <button onClick={() => { setShowAddModal(false); setPreviewImage(null); setEditingId(null); setTeamForm({ name: "", role: "", img: "", phone: "", description: "", prestations: [] }); }} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors shadow-sm">
+                                        <Plus className="rotate-45" size={18} />
+                                    </button>
                                 </div>
 
-                                {/* Right Side: Content */}
-                                <div className="w-full md:w-1/2 p-8 md:p-14 flex flex-col overflow-y-auto">
-                                    <div className="mb-8">
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <div className="w-8 h-1 bg-emerald-500 rounded-full" />
-                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">Aperçu Dashboard</span>
-                                        </div>
-                                        <h2 className="text-3xl md:text-5xl font-black text-[#0f172a] uppercase tracking-tighter leading-none mb-4">
-                                            {selectedDetail.name}
-                                        </h2>
-                                        <div className="flex items-center gap-4">
-                                            <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100">
-                                                <span className="text-2xl font-black text-emerald-600">
-                                                    {selectedDetail.price} 
-                                                    {!selectedDetail.price.toString().toUpperCase().includes('FCFA') && (
-                                                        <span className="text-xs opacity-50 ml-1">FCFA</span>
-                                                    )}
-                                                </span>
+                                <form onSubmit={handleAddSubmit} className="p-5 space-y-2.5 overflow-y-auto no-scrollbar">
+                                    {activeTab === "produits" && (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nom du produit</label>
+                                                    <input required value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Prix (€/XAF)</label>
+                                                    <input required value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                                </div>
                                             </div>
-                                            <span className="text-gray-400 font-bold text-sm uppercase tracking-widest">Disponible</span>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Catégorie</label>
+                                                <input value={productForm.category} onChange={e => setProductForm({...productForm, category: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" placeholder="Général, Électronique, ..." />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Photo réelle</label>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative w-12 h-12 bg-slate-100 rounded-lg overflow-hidden border border-dashed border-slate-200 flex items-center justify-center group cursor-pointer hover:border-indigo-400 transition-colors">
+                                                        {productForm.imageUrl ? (
+                                                            <img src={productForm.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Upload className="text-slate-300" size={16} />
+                                                        )}
+                                                        <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'product')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                    </div>
+                                                    <p className="text-[8px] font-bold text-slate-400 uppercase">Importer</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">URL Image (Alt)</label>
+                                                <input value={productForm.imageUrl} onChange={e => setProductForm({...productForm, imageUrl: e.target.value})} className="w-full bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs" placeholder="https://..." />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Description</label>
+                                                <textarea rows={2} value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs" />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {activeTab === "videos" && (
+                                        <div className="space-y-4">
+                                            {videoForm.src && (
+                                                <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden relative shadow-inner border border-slate-100 flex items-center justify-center">
+                                                    {(videoForm.srcType === 'youtube' || videoForm.src.includes('youtube') || videoForm.src.includes('youtu.be')) ? (
+                                                        <iframe 
+                                                            src={`https://www.youtube.com/embed/${getYoutubeId(videoForm.src)}`} 
+                                                            className="w-full h-full pointer-events-auto"
+                                                            allow="autoplay; encrypted-media"
+                                                        />
+                                                    ) : (
+                                                        <video 
+                                                            src={videoForm.src}
+                                                            className="w-full h-full object-cover"
+                                                            controls
+                                                            poster={videoForm.thumbnail}
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Titre de la vidéo</label>
+                                                <input required value={videoForm.title} onChange={e => setVideoForm({...videoForm, title: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Description / Légende</label>
+                                                <textarea rows={2} value={videoForm.caption} onChange={e => setVideoForm({...videoForm, caption: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" placeholder="Ex: Voici comment commander..." />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Source de la vidéo</label>
+                                                <div className="flex gap-2">
+                                                    <input required value={videoForm.src} onChange={e => setVideoForm({...videoForm, src: e.target.value})} className="flex-1 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs" placeholder="URL ou uploadez un fichier..." />
+                                                    <div className="relative">
+                                                        <button type="button" disabled={uploading} className="h-full px-4 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-indigo-100 transition-colors disabled:opacity-50">
+                                                            {uploading ? <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /> : <Upload size={14} />}
+                                                            {uploading ? "Patientez..." : "Upload"}
+                                                        </button>
+                                                        <input type="file" accept="video/*" onChange={handleVideoUpload} disabled={uploading} className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Type</label>
+                                                    <select value={videoForm.srcType} onChange={e => setVideoForm({...videoForm, srcType: e.target.value as any})} className="w-full bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs">
+                                                        <option value="youtube">YouTube</option>
+                                                        <option value="facebook">Facebook</option>
+                                                        <option value="file">Fichier direct URL / Autre</option>
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Thumbnail URL</label>
+                                                    <input value={videoForm.thumbnail} onChange={e => setVideoForm({...videoForm, thumbnail: e.target.value})} className="w-full bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs" />
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
-                                    <div className="group bg-[#f8fafc] p-8 rounded-[2.5rem] mb-10 border border-[#e2e8f0]/40 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
-                                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/40 mb-4 flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                                            Description du Catalogue
-                                        </h4>
-                                        <p className="text-gray-500 font-medium leading-relaxed text-base relative z-10">
-                                            {selectedDetail.description || "Ce produit d'exception a été sélectionné pour sa qualité exceptionnelle et sa fraîcheur garantie. Idéal pour une alimentation saine et équilibrée, il représente le meilleur de notre terroir."}
-                                        </p>
-                                    </div>
+                                    {activeTab === "marche" && (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nom de l'article</label>
+                                                    <input required value={marketForm.name} onChange={e => setMarketForm({...marketForm, name: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Prix XAF</label>
+                                                    <input required value={marketForm.price} onChange={e => setMarketForm({...marketForm, price: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Boutique</label>
+                                                    <input value={marketForm.shopName} onChange={e => setMarketForm({...marketForm, shopName: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Localisation</label>
+                                                    <input value={marketForm.location} onChange={e => setMarketForm({...marketForm, location: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Photo réelle</label>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative w-12 h-12 bg-slate-100 rounded-lg overflow-hidden border border-dashed border-slate-200 flex items-center justify-center group cursor-pointer hover:border-indigo-400 transition-colors">
+                                                        {marketForm.imageUrl ? (
+                                                            <img src={marketForm.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Upload className="text-slate-300" size={16} />
+                                                        )}
+                                                        <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'marche')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                    </div>
+                                                    <p className="text-[8px] font-bold text-slate-400 uppercase">Importer</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">URL Image (Alt)</label>
+                                                <input value={marketForm.imageUrl} onChange={e => setMarketForm({...marketForm, imageUrl: e.target.value})} className="w-full bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs" />
+                                            </div>
+                                        </>
+                                    )}
 
-                                    <div className="flex flex-col sm:flex-row gap-4 mt-auto pt-10 border-t border-gray-100">
-                                        <a 
-                                            href={`https://wa.me/${data.settings.whatsapp}?text=Bonjour Djapero, je souhaite commander en direct : ${selectedDetail.name}`}
-                                            target="_blank"
-                                            className="flex-grow flex items-center justify-center gap-6 py-6 bg-[#25D366] hover:bg-black text-white rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-[13px] shadow-[0_20px_50px_rgba(37,211,102,0.3)] transition-all hover:scale-[1.03] active:scale-[0.97] group relative overflow-hidden"
-                                        >
-                                            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 skew-x-12" />
-                                            <Phone size={28} className="group-hover:rotate-12 transition-transform" />
-                                            Commander via WhatsApp
-                                        </a>
-                                        <a 
-                                            href={`tel:${data.settings.call}`} 
-                                            className="px-10 flex items-center justify-center gap-4 py-6 bg-white border-2 border-[#0f172a]/5 text-[#0f172a] hover:bg-gray-50 rounded-[2.5rem] font-black uppercase tracking-[0.2em] text-[13px] transition-all hover:border-emerald-500 shadow-xl group"
-                                        >
-                                            <Phone size={24} className="text-emerald-500 group-hover:scale-110 transition-transform" />
-                                            Appeler
-                                        </a>
-                                    </div>
-                                    <p className="text-center mt-6 text-[9px] font-black text-gray-300 uppercase tracking-[0.3em]">
-                                        Livraison Express • Djapero Admin Dashboard
-                                    </p>
-                                </div>
+                                    {activeTab === "team" && (
+                                        <>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nom complet</label>
+                                                <input required value={teamForm.name} onChange={e => setTeamForm({...teamForm, name: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Rôle / Travail</label>
+                                                <input required value={teamForm.role} onChange={e => setTeamForm({...teamForm, role: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" placeholder="Gérant, Livreur..." />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Numéro WhatsApp (ex: 228...)</label>
+                                                <input value={teamForm.phone} onChange={e => setTeamForm({...teamForm, phone: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm" placeholder="2289205..." />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Description / Présentation</label>
+                                                <textarea rows={3} value={teamForm.description} onChange={e => setTeamForm({...teamForm, description: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-xs" placeholder="Une passion transformée en savoir-faire..." />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Photo réelle</label>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative w-14 h-14 bg-slate-100 rounded-xl overflow-hidden border-2 border-dashed border-slate-200 flex items-center justify-center group cursor-pointer hover:border-indigo-400 transition-colors">
+                                                        {previewImage || teamForm.img ? (
+                                                            <img src={previewImage || teamForm.img || undefined} alt="Preview" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <Upload className="text-slate-300" size={18} />
+                                                        )}
+                                                        <input 
+                                                            type="file" 
+                                                            accept="image/*" 
+                                                            onChange={(e) => handleFileChange(e, 'team')}
+                                                            className="absolute inset-0 opacity-0 cursor-pointer"
+                                                        />
+                                                    </div>
+                                                    <p className="text-[8px] font-bold text-slate-400 uppercase leading-tight">Cliquer pour<br/>importer</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">URL Photo (Alt)</label>
+                                                <input value={teamForm.img} onChange={e => setTeamForm({...teamForm, img: e.target.value})} className="w-full bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-[10px]" placeholder="... ou photo uploadée" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Prestations (Appuyer sur Entrée)</label>
+                                                <div className="flex flex-wrap gap-1 mb-1">
+                                                    {teamForm.prestations.map((p, i) => (
+                                                        <span key={i} className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase flex items-center gap-1">
+                                                            {p}
+                                                            <button type="button" onClick={() => setTeamForm({...teamForm, prestations: teamForm.prestations.filter((_, idx) => idx !== i)})} className="hover:text-red-500">
+                                                                <Plus className="rotate-45" size={10} />
+                                                            </button>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                <input 
+                                                    value={prestationInput} 
+                                                    onChange={e => setPrestationInput(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter' && prestationInput.trim()) {
+                                                            e.preventDefault();
+                                                            if (!teamForm.prestations.includes(prestationInput.trim())) {
+                                                                setTeamForm({...teamForm, prestations: [...teamForm.prestations, prestationInput.trim()]});
+                                                            }
+                                                            setPrestationInput("");
+                                                        }
+                                                    }}
+                                                    className="w-full bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-[10px]" 
+                                                    placeholder="Service..." 
+                                                />
+                                            </div>
+                                        </>
+                                    )}
 
+                                    {activeTab === "affiches" && (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Titre (Nom)</label>
+                                                    <input required value={adForm.title} onChange={e => setAdForm({...adForm, title: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-black text-sm" placeholder="ex: Tomate" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Sous-titre (Catégorie)</label>
+                                                    <input required value={adForm.subtitle} onChange={e => setAdForm({...adForm, subtitle: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-[10px] uppercase tracking-widest text-emerald-500" placeholder="ex: GÉNÉRAL" />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Prix (Optionnel)</label>
+                                                    <input value={adForm.price} onChange={e => setAdForm({...adForm, price: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-sm text-emerald-600" placeholder="ex: 1000 FCFA" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Lien Bouton</label>
+                                                    <input value={adForm.link} onChange={e => setAdForm({...adForm, link: e.target.value})} className="w-full bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-400/50 font-bold text-[10px]" placeholder="/produits" />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Image de l'affiche</label>
+                                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                    <div className="relative w-24 h-16 bg-white rounded-xl overflow-hidden shadow-inner flex items-center justify-center border border-dashed border-slate-200 group cursor-pointer">
+                                                        {adForm.imageUrl ? (
+                                                            <img src={adForm.imageUrl} className="w-full h-full object-cover" alt="preview" />
+                                                        ) : (
+                                                            <ImageIcon className="text-slate-300" size={24} />
+                                                        )}
+                                                        <input type="file" required={!adForm.imageUrl && !editingId} accept="image/*" onChange={(e) => handleFileChange(e, 'ad')} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-[9px] font-black text-slate-600 uppercase">Télécharger une image</p>
+                                                        <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">Cliquez sur le cadre gauche</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <button 
+                                        type="submit" 
+                                        disabled={isSaving}
+                                        className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-lg shadow-indigo-100 mt-2 hover:bg-black transition-all disabled:opacity-50"
+                                    >
+                                        {isSaving ? "Sauvegarde..." : (editingId ? "Modifier" : "Publier maintenant")}
+                                    </button>
+                                </form>
                             </motion.div>
                         </div>
                     )}
                 </AnimatePresence>
-            </main>
 
-            {/* Bulk Product Modal */}
-            {bulkProductModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setBulkProductModal(false)}>
+                {/* Floating "In Progress" type widget for status updates */}
+                {isSaving && (
                     <motion.div 
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="modal-card p-6 md:p-10 bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-5xl shadow-2xl relative overflow-y-auto max-h-full custom-scrollbar"
-                        onClick={e => e.stopPropagation()}
+                        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        className="fixed bottom-12 right-12 w-80 bg-white rounded-[2rem] shadow-2xl p-6 border border-slate-100 z-[100]"
                     >
-                        <button className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-black transition-colors" onClick={() => setBulkProductModal(false)}><X size={24}/></button>
-                        
-                        <div className="mb-10">
-                            <h2 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter underline decoration-emerald-500 underline-offset-8">Enregistrement Groupé</h2>
-                            <p className="text-gray-400 font-bold mt-4 uppercase tracking-widest text-[10px]">Ajoutez rapidement une liste de produits différents au catalogue.</p>
-                        </div>
-
-                        {/* Quick Paste Area */}
-                        <div className="mb-10 p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
-                            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-600 mb-4 flex items-center gap-2">
-                                <Plus size={14} /> Mode Rapide (Copier/Coller)
-                            </h3>
-                            <textarea 
-                                className="w-full h-32 bg-white rounded-2xl p-6 text-sm font-bold border border-emerald-100 outline-none focus:border-emerald-500 transition-all placeholder:text-gray-200"
-                                placeholder={"Nom Produit, Prix\nEx: Tomates Bio, 2500\nEx: Vanille Pure, 5000"}
-                                onChange={(e) => {
-                                    const text = e.target.value;
-                                    if (!text) return;
-                                    const lines = text.split('\n');
-                                    const newBatch = lines.map(line => {
-                                        const parts = line.split(',');
-                                        if (parts.length >= 2) {
-                                            return { 
-                                                name: parts[0].trim(), 
-                                                price: parts[1].trim(), 
-                                                category: "Frais", 
-                                                description: parts[2] ? parts[2].trim() : "",
-                                                imageUrl: "" 
-                                            };
-                                        }
-                                        return null;
-                                    }).filter(r => r !== null);
-
-                                    if (newBatch.length > 0) {
-                                        setBulkRows([...bulkRows.filter(r => r.name || r.price), ...newBatch as any]);
-                                        e.target.value = ""; // Reset textarea
-                                    }
-                                }}
-                            ></textarea>
-                            <p className="mt-3 text-[10px] text-emerald-400 font-bold uppercase tracking-widest italic">Les lignes valides (Nom, Prix) seront ajoutées au tableau ci-dessous.</p>
-                        </div>
-
-                        <div className="overflow-x-auto mb-8 bg-gray-50/50 rounded-3xl p-4 md:p-8 border border-gray-100">
-                            <table className="w-full min-w-[800px]">
-                                <thead>
-                                    <tr className="text-left">
-                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4 w-24">Image</th>
-                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Nom du Produit</th>
-                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Prix (FCFA)</th>
-                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Catégorie</th>
-                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4">Description</th>
-                                        <th className="pb-6 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 px-4 w-12"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {bulkRows.map((row, idx) => (
-                                        <tr key={idx} className="group border-b border-gray-50/50">
-                                            <td className="py-2 px-2">
-                                                <div 
-                                                    className="w-20 h-20 bg-white rounded-2xl border border-gray-100 flex items-center justify-center overflow-hidden cursor-pointer hover:border-emerald-500 transition-all"
-                                                    onClick={() => {
-                                                        const input = document.createElement('input');
-                                                        input.type = 'file';
-                                                        input.accept = 'image/*';
-                                                        input.onchange = async (e) => {
-                                                            const file = (e.target as HTMLInputElement).files?.[0];
-                                                            if (file) {
-                                                                const url = await handleFileUpload(file);
-                                                                if (url) {
-                                                                    const newRows = [...bulkRows];
-                                                                    newRows[idx].imageUrl = url;
-                                                                    setBulkRows(newRows);
-                                                                }
-                                                            }
-                                                        };
-                                                        input.click();
-                                                    }}
-                                                >
-                                                    {row.imageUrl ? (
-                                                        <img src={row.imageUrl} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <CameraIcon size={20} className="text-gray-200" />
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="py-2 px-2">
-                                                <input 
-                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-black uppercase tracking-tighter text-sm"
-                                                    placeholder="Tomates Bio, Vanille..."
-                                                    value={row.name}
-                                                    onChange={e => {
-                                                        const newRows = [...bulkRows];
-                                                        newRows[idx].name = e.target.value;
-                                                        setBulkRows(newRows);
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="py-2 px-2">
-                                                <input 
-                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-black text-sm"
-                                                    placeholder="2500"
-                                                    value={row.price}
-                                                    onChange={e => {
-                                                        const newRows = [...bulkRows];
-                                                        newRows[idx].price = e.target.value;
-                                                        setBulkRows(newRows);
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="py-2 px-2">
-                                                <select 
-                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-bold text-xs uppercase tracking-widest text-gray-500 appearance-none"
-                                                    value={row.category}
-                                                    onChange={e => {
-                                                        const newRows = [...bulkRows];
-                                                        newRows[idx].category = e.target.value;
-                                                        setBulkRows(newRows);
-                                                    }}
-                                                >
-                                                    <option value="Frais">Frais</option>
-                                                    <option value="Epicerie">Épicerie</option>
-                                                    <option value="Surgelés">Surgelés</option>
-                                                    <option value="Boissons">Boissons</option>
-                                                    <option value="Equipements">Équipements</option>
-                                                    <option value="Autres">Autres</option>
-                                                </select>
-                                            </td>
-                                            <td className="py-2 px-2">
-                                                <input 
-                                                    className="w-full bg-white px-6 py-4 rounded-2xl border border-gray-100 focus:border-emerald-500 outline-none font-medium text-xs"
-                                                    placeholder="Description courte..."
-                                                    value={row.description}
-                                                    onChange={e => {
-                                                        const newRows = [...bulkRows];
-                                                        newRows[idx].description = e.target.value;
-                                                        setBulkRows(newRows);
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="py-2 px-2">
-                                                <button 
-                                                    onClick={() => {
-                                                        if (bulkRows.length > 1) {
-                                                            setBulkRows(bulkRows.filter((_, i) => i !== idx));
-                                                        }
-                                                    }}
-                                                    className="w-12 h-12 flex items-center justify-center text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                >
-                                                    <Trash2 size={20} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div className="flex flex-col md:flex-row gap-6">
-                            <button 
-                                onClick={() => setBulkRows([...bulkRows, { name: "", price: "", category: "Frais", description: "" }])}
-                                className="flex-1 py-6 border-2 border-dashed border-emerald-200 rounded-3xl text-emerald-600 font-black uppercase tracking-widest text-xs hover:bg-emerald-50 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Plus size={20} /> Ajouter une Ligne
-                            </button>
-                            <button 
-                                disabled={isSaving}
-                                onClick={async () => {
-                                    const validRows = bulkRows.filter(r => r.name && r.price);
-                                    if (validRows.length === 0) return alert("Veuillez remplir au moins un produit complet.");
-                                    
-                                    setIsSaving(true);
-                                    let successCount = 0;
-                                    for (const row of validRows) {
-                                        const success = await addProduct({
-                                            ...row,
-                                            imageUrl: "",
-                                            badge: "",
-                                            createdAt: Date.now()
-                                        });
-                                        if (success) successCount++;
-                                    }
-                                    setIsSaving(false);
-                                    
-                                    if (successCount > 0) {
-                                        alert(`✅ ${successCount} produits ajoutés avec succès !`);
-                                        setBulkProductModal(false);
-                                        setBulkRows([{ name: "", price: "", category: "Frais", description: "" }]);
-                                    }
-                                }}
-                                className="flex-[2] py-6 bg-emerald-600 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
-                            >
-                                {isSaving ? (
-                                    <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <>
-                                        <Save size={20} /> Finaliser l'Importation ({bulkRows.filter(r => r.name && r.price).length})
-                                    </>
-                                )}
-                            </button>
+                        <h4 className="font-black text-slate-800 uppercase tracking-widest text-[10px] mb-4">En cours</h4>
+                        <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-2xl">
+                            <div className="w-10 h-10 bg-indigo-100 flex items-center justify-center text-indigo-600 rounded-xl">
+                                <Save size={20} />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-sm font-bold text-slate-700">Sauvegarde...</p>
+                                <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                                    <motion.div 
+                                        className="bg-indigo-600 h-full"
+                                        initial={{ width: "0%" }}
+                                        animate={{ width: "100%" }}
+                                        transition={{ duration: 1 }}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </motion.div>
-                </div>
-            )}
-
-            {/* Product Modal */}
-            {productModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setProductModal(null)}>
-                    <motion.div 
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="modal-card p-6 md:p-10 bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-full custom-scrollbar"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <button className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-black transition-colors" onClick={() => setProductModal(null)}><X size={24}/></button>
-                        <h2 className="text-2xl md:text-3xl font-black mb-8 uppercase tracking-tighter underline decoration-emerald-500 underline-offset-8">Produit Djapero</h2>
-                        
-                        {/* Live Image Preview */}
-                        <div className="mb-8 w-full h-48 bg-gray-50 rounded-3xl flex items-center justify-center p-6 border-2 border-dashed border-gray-100 overflow-hidden relative group">
-                            {uploading ? (
-                                <div className="text-center w-full px-4">
-                                    <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2 overflow-hidden">
-                                        <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
-                                    </div>
-                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest animate-pulse">Chargement... {uploadProgress}%</p>
-                                </div>
-                            ) : (previewUrl && previewUrl !== "") ? (
-                                <img src={previewUrl || undefined} className="max-h-full max-w-full object-contain animate-in fade-in zoom-in duration-300" onError={() => setPreviewUrl("")} />
-                            ) : (
-                                <div className="text-gray-300 flex flex-col items-center gap-2">
-                                    <CameraIcon size={40} />
-                                    <p className="text-[10px] font-bold uppercase tracking-widest leading-none">Aperçu de l'image</p>
-                                </div>
-                            )}
-                            <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                                <CloudUpload className="text-white" size={40} />
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            const url = await handleFileUpload(file);
-                                            if (url) setPreviewUrl(url);
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </div>
-
-                        <form className="space-y-6" onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                                const formData = new FormData(e.currentTarget);
-                                const updatedProduct = {
-                                    name: formData.get("name") as string,
-                                    category: formData.get("category") as string,
-                                    price: formData.get("price") as string,
-                                    description: formData.get("description") as string,
-                                    imageUrl: previewUrl || formData.get("imageUrl") as string,
-                                    badge: formData.get("badge") as string,
-                                    createdAt: productModal.createdAt || Date.now()
-                                };
-
-                                if (productModal.id) {
-                                    await updateProduct(productModal.id, updatedProduct);
-                                } else {
-                                    await addProduct(updatedProduct as any);
-                                }
-                                setProductModal(null);
-                                alert("✅ Produit enregistré !");
-                            } catch (err: any) {
-                                console.error("Product submit error:", err);
-                                let errorMsg = "Désolé! Erreur lors de l'enregistrement du produit.";
-                                try {
-                                    const parsed = JSON.parse(err.message);
-                                    errorMsg = `Erreur (${parsed.operationType}): ${parsed.error}`;
-                                } catch(e) {
-                                    errorMsg = err.message || errorMsg;
-                                }
-                                alert(`❌ ${errorMsg}`);
-                            }
-                        }}>
-                            <div className="grid grid-cols-1 gap-6">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Nom du produit *</label>
-                                    <input required name="name" defaultValue={productModal.name} className="w-full bg-neutral-50 px-6 py-3 rounded-xl border border-neutral-100 focus:border-emerald-500 outline-none font-bold" placeholder="Mangues..." />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Catégorie</label>
-                                        <input name="category" defaultValue={productModal.category} className="w-full bg-neutral-50 px-6 py-3 rounded-xl border border-neutral-100 focus:border-emerald-500 outline-none font-bold" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Prix (FCFA)</label>
-                                        <input name="price" defaultValue={productModal.price} className="w-full bg-neutral-50 px-6 py-3 rounded-xl border border-neutral-100 focus:border-emerald-500 outline-none font-bold" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Description</label>
-                                    <textarea name="description" defaultValue={productModal.description} className="w-full bg-neutral-50 px-6 py-3 rounded-xl border border-neutral-100 focus:border-emerald-500 outline-none font-medium h-24 resize-none" />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">URL Image</label>
-                                    <input 
-                                        name="imageUrl" 
-                                        defaultValue={productModal.imageUrl} 
-                                        onChange={(e) => setPreviewUrl(e.target.value)}
-                                        className="w-full bg-neutral-50 px-6 py-3 rounded-xl border border-neutral-100 focus:border-emerald-500 outline-none font-medium text-xs truncate" 
-                                        placeholder="https://..." 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Badge (Ex: NEW, PROMO)</label>
-                                    <input name="badge" defaultValue={productModal.badge} className="w-full bg-neutral-50 px-6 py-3 rounded-xl border border-neutral-100 focus:border-emerald-500 outline-none font-black uppercase" />
-                                </div>
-                            </div>
-                            <button type="submit" className="w-full bg-black text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-lg hover:bg-emerald-600 transition-colors">
-                                Enregistrer
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-
-            {/* Video Modal */}
-            {videoModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setVideoModal(null)}>
-                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-10 bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-full custom-scrollbar" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-black transition-colors" onClick={() => setVideoModal(null)}><X size={24}/></button>
-                        <h2 className="text-2xl md:text-3xl font-black mb-8 uppercase tracking-tighter underline decoration-blue-500 underline-offset-8">Vidéo Sociale</h2>
-                        
-                        {/* Thumbnail Upload Area */}
-                        <div className="mb-8 w-full aspect-video bg-[#0f172a] rounded-[2rem] flex items-center justify-center p-0 border-4 border-white shadow-xl overflow-hidden relative group">
-                            {(previewUrl || videoModal.thumbnail) ? (
-                                <img src={previewUrl || videoModal.thumbnail || undefined} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-80" alt="Preview" onError={() => setPreviewUrl("")} />
-                            ) : (
-                                <div className="text-white/20 flex flex-col items-center gap-3">
-                                    <ImageIcon size={32} />
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em]">Image de couverture</p>
-                                </div>
-                            )}
-                            <label className="absolute inset-0 bg-blue-600/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center cursor-pointer text-white">
-                                <CloudUpload size={40} />
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] mt-3">{previewUrl ? "Changer la couverture" : "Ajouter une couverture"}</span>
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            if (!file.type.startsWith('image/')) {
-                                                alert("Veuillez choisir une IMAGE pour la couverture.");
-                                                return;
-                                            }
-                                            const url = await handleFileUpload(file);
-                                            if (url) setPreviewUrl(url);
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </div>
-
-                            <div className="grid grid-cols-2 gap-4 mb-8">
-                                <button 
-                                    type="button"
-                                    onClick={() => setVideoSrcType('youtube')}
-                                    className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${videoSrcType === 'youtube' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
-                                >
-                                    Lien YouTube
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={() => setVideoSrcType('file')}
-                                    className={`py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border-2 transition-all ${videoSrcType === 'file' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}
-                                >
-                                    Fichier Vidéo
-                                </button>
-                            </div>
-
-                            <form className="space-y-6" onSubmit={async (e) => {
-                                e.preventDefault();
-                                try {
-                                    const formData = new FormData(e.currentTarget);
-                                    const updatedVideo = {
-                                        title: formData.get("title") as string,
-                                        caption: formData.get("caption") as string,
-                                        src: videoSrcType === 'file' ? videoPreviewUrl : getYoutubeId(formData.get("src") as string),
-                                        srcType: videoSrcType, 
-                                        thumbnail: previewUrl || formData.get("thumbnail") as string,
-                                        createdAt: videoModal.createdAt || Date.now()
-                                    };
-
-                                    if (videoModal.id) {
-                                        await updateVideo(videoModal.id, updatedVideo);
-                                    } else {
-                                        await addVideo(updatedVideo as any);
-                                    }
-                                    setVideoModal(null);
-                                    alert("✅ Vidéo publiée !");
-                                } catch (err: any) {
-                                    console.error("Video submit error:", err);
-                                    let errorMsg = "Oups! Erreur lors de la publication de la vidéo.";
-                                    try {
-                                        const parsed = JSON.parse(err.message);
-                                        errorMsg = `Erreur (${parsed.operationType}): ${parsed.error}`;
-                                    } catch(e) {
-                                        errorMsg = err.message || errorMsg;
-                                    }
-                                    alert(`❌ ${errorMsg}`);
-                                }
-                            }}>
-                                 <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Titre de la vidéo *</label>
-                                    <input required name="title" defaultValue={videoModal.title} className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-bold" />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Légende (Caption)</label>
-                                    <input name="caption" defaultValue={videoModal.caption} className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-medium" placeholder="Ex: Découvrez notre nouveau snack !" />
-                                </div>
-                                {videoSrcType === 'youtube' ? (
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Lien YouTube / Shorts *</label>
-                                        <input required name="src" defaultValue={videoModal.src} className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-medium" placeholder="Ex: https://www.youtube.com/shorts/..." />
-                                        <p className="text-[9px] text-gray-400 mt-2 ml-2 italic">Copiez-collez simplement l'adresse de votre vidéo YouTube ou YouTube Shorts.</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between ml-2">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-blue-600">Fichier Vidéo (MP4, MOV) *</label>
-                                            <span className="text-[9px] text-gray-400 font-bold uppercase">Max 500 Mo</span>
-                                        </div>
-                                        <div className="p-8 bg-blue-50/30 rounded-3xl border-4 border-white shadow-inner flex flex-col items-center justify-center gap-4 relative group hover:bg-blue-50/50 transition-all overflow-hidden min-h-[220px]">
-                                            {uploading ? (
-                                                <div className="text-center w-full px-6 z-10">
-                                                    <div className="w-full bg-white rounded-full h-3 mb-3 overflow-hidden shadow-sm">
-                                                        <div className="bg-blue-600 h-3 rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(37,99,235,0.5)]" style={{ width: `${uploadProgress}%` }}></div>
-                                                    </div>
-                                                    <p className="text-[11px] font-black text-blue-600 uppercase tracking-widest animate-pulse">Envoi en cours... {uploadProgress}%</p>
-                                                    <p className="text-[8px] text-blue-400 mt-2 font-bold uppercase">Ne fermez pas cette fenêtre</p>
-                                                    <div className="mt-4 p-4 bg-white/50 rounded-2xl border border-blue-100">
-                                                        <p className="text-[8px] text-blue-600 font-bold uppercase leading-relaxed">
-                                                            💡 Astuce : Si l'envoi est trop long, essayez de compresser votre vidéo ou utilisez un lien YouTube pour une vitesse instantanée.
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ) : (videoPreviewUrl && videoPreviewUrl !== "") ? (
-                                                <div className="text-center w-full z-10">
-                                                    <div className="aspect-video w-full max-w-[280px] mx-auto bg-black rounded-2xl overflow-hidden mb-4 shadow-2xl ring-4 ring-white relative group/player">
-                                                        <video src={videoPreviewUrl || undefined} className="w-full h-full object-cover" autoPlay muted loop />
-                                                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity">
-                                                            <div className="p-3 bg-white/20 backdrop-blur-md rounded-full text-white">
-                                                                <Play size={24} fill="currentColor" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">Vidéo importée avec succès !</p>
-                                                    <button type="button" onClick={() => setVideoPreviewUrl("")} className="text-red-500 text-[10px] font-black uppercase hover:bg-red-500 hover:text-white transition-all px-6 py-2 rounded-full border-2 border-red-100 flex items-center gap-2 mx-auto justify-center bg-white shadow-sm">
-                                                        <Trash2 size={12} /> Supprimer et changer
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center z-10">
-                                                    <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center text-blue-400 mb-4 mx-auto group-hover:scale-110 group-hover:text-blue-600 transition-all">
-                                                        <CloudUpload size={32} />
-                                                    </div>
-                                                    <p className="text-[11px] font-black text-blue-900/60 uppercase tracking-[0.2em] mb-1">Cliquer pour importer</p>
-                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Le fichier sera transformé en paysage si nécessaire</p>
-                                                </div>
-                                            )}
-                                            {!uploading && (
-                                                <input 
-                                                    type="file" 
-                                                    className="absolute inset-0 opacity-0 cursor-pointer z-20" 
-                                                    accept="video/mp4,video/x-m4v,video/*"
-                                                    onChange={async (e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (file) {
-                                                            if (!file.type.startsWith('video/')) {
-                                                                alert("❌ Veuillez choisir un fichier vidéo valide (MP4, MOV, etc.).");
-                                                                return;
-                                                            }
-
-                                                            const MAX_SIZE = 500 * 1024 * 1024; // 500MB
-                                                            if (file.size > MAX_SIZE) {
-                                                                alert(`❌ Fichier trop lourd (${(file.size / (1024 * 1024)).toFixed(1)}Mo). La limite est de 500Mo.`);
-                                                                return;
-                                                            }
-                                                            
-                                                            console.log(`Starting upload for: ${file.name} (${file.size} bytes)`);
-                                                            const url = await handleFileUpload(file);
-                                                            if (url) {
-                                                                setVideoPreviewUrl(url);
-                                                                setTimeout(() => {
-                                                                    alert("✅ Vidéo importée avec succès ! Elle s'affichera automatiquement sur le tableau de bord.");
-                                                                }, 500);
-                                                            } else {
-                                                                alert("❌ L'importation a échoué. Vérifiez votre connexion.");
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                            )}
-                                            {/* Decorative background for the zone */}
-                                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-100/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
-                                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-100/20 rounded-full blur-3xl -ml-16 -mb-16 pointer-events-none" />
-                                        </div>
-                                        {videoPreviewUrl && <input type="hidden" name="src" value={videoPreviewUrl} />}
-                                    </div>
-                                )}
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">URL Miniature (Optionnel)</label>
-                                    <input 
-                                        name="thumbnail" 
-                                        defaultValue={videoModal.thumbnail} 
-                                        onChange={(e) => setPreviewUrl(e.target.value)}
-                                        className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-blue-500 outline-none font-medium truncate" 
-                                        placeholder="https://..."
-                                    />
-                                </div>
-                                        <button type="submit" disabled={uploading} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed">
-                                            {uploading ? `Chargement ${uploadProgress}%...` : "Publier la vidéo"}
-                                        </button>
-                            </form>
-                    </motion.div>
-                </div>
-            )}
-
-            {/* Service Modal */}
-            {serviceModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setServiceModal(null)}>
-                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-10 bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-lg shadow-2xl relative overflow-y-auto max-h-full custom-scrollbar" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-black transition-colors" onClick={() => setServiceModal(null)}><X size={24}/></button>
-                        <h2 className="text-2xl md:text-3xl font-black mb-8 uppercase tracking-tighter underline decoration-[#10b981] underline-offset-8">L'Expertise Djapero</h2>
-                        
-                        {/* Live Image Preview */}
-                        <div className="mb-8 w-full h-40 bg-emerald-50/30 rounded-3xl flex items-center justify-center p-6 border-2 border-dashed border-emerald-100 overflow-hidden relative group">
-                            {previewUrl ? (
-                                <img src={previewUrl || undefined} className="max-h-full max-w-full object-contain animate-in fade-in zoom-in duration-300" onError={() => setPreviewUrl("")} />
-                            ) : (
-                                <div className="text-emerald-200 flex flex-col items-center gap-2">
-                                    <Briefcase size={32} />
-                                    <p className="text-[10px] font-bold uppercase tracking-widest">Aperçu Icône</p>
-                                </div>
-                            )}
-                            <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                                <CloudUpload className="text-emerald-500" size={40} />
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            const url = await handleFileUpload(file);
-                                            if (url) setPreviewUrl(url);
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </div>
-
-                        <form className="space-y-6" onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                                const formData = new FormData(e.currentTarget);
-                                const updatedService = {
-                                    name: formData.get("name") as string,
-                                    category: formData.get("category") as string,
-                                    description: formData.get("description") as string,
-                                    imageUrl: previewUrl || formData.get("imageUrl") as string,
-                                    createdAt: serviceModal.createdAt || Date.now()
-                                };
-
-                                if (serviceModal.id) {
-                                    await updateService(serviceModal.id, updatedService);
-                                } else {
-                                    await addService(updatedService as any);
-                                }
-                                setServiceModal(null);
-                                alert("✅ Expertise enregistrée !");
-                            } catch (err: any) {
-                                console.error("Service submit error:", err);
-                                let errorMsg = "Attention! Erreur lors de l'enregistrement du service.";
-                                try {
-                                    const parsed = JSON.parse(err.message);
-                                    errorMsg = `Erreur (${parsed.operationType}): ${parsed.error}`;
-                                } catch(e) {
-                                    errorMsg = err.message || errorMsg;
-                                }
-                                alert(`❌ ${errorMsg}`);
-                            }
-                        }}>
-                             <div className="space-y-6">
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Nom de l'Expertise (Titre) *</label>
-                                    <input 
-                                        required 
-                                        name="name" 
-                                        defaultValue={serviceModal.name} 
-                                        className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-[#10b981] outline-none font-black uppercase" 
-                                        placeholder="EX: DESIGN GRAPHIQUE"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Catégorie (Sous-titre)</label>
-                                    <input 
-                                        name="category" 
-                                        defaultValue={serviceModal.category} 
-                                        className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-[#10b981] outline-none font-bold uppercase" 
-                                        placeholder="EX: CRÉATION DIGITALE"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">URL Image / Icône</label>
-                                    <input 
-                                        name="imageUrl" 
-                                        defaultValue={serviceModal.imageUrl} 
-                                        onChange={(e) => setPreviewUrl(e.target.value)}
-                                        className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-[#10b981] outline-none font-medium" 
-                                        placeholder="https://..."
-                                    />
-                                    <p className="text-[9px] text-gray-400 mt-2 ml-2 font-bold uppercase tracking-widest italic">Note: Vous pouvez aussi glisser une image dans le cadre ci-dessus</p>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest mb-1 block ml-2">Description</label>
-                                    <textarea 
-                                        name="description" 
-                                        defaultValue={serviceModal.description} 
-                                        className="w-full bg-neutral-100/50 px-6 py-4 rounded-2xl border-2 border-transparent focus:border-[#10b981] outline-none font-medium h-32 resize-none" 
-                                        placeholder="Description détaillée de l'expertise..."
-                                    />
-                                </div>
-                            </div>
-                            <button type="submit" className="w-full bg-[#10b981] text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all hover:scale-[1.02]">
-                                Enregistrer l'expertise
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-
-            {/* Portfolio Modal */}
-            {realModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setRealModal(null)}>
-                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-12 bg-white rounded-[3rem] md:rounded-[4rem] w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-full no-scrollbar px-6 md:px-12" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50" onClick={() => setRealModal(null)}><X size={28}/></button>
-                        
-                        <div className="mb-10">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="w-10 h-1 bg-yellow-500 rounded-full" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600">Portfolio Card Elite</span>
-                            </div>
-                            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.85] text-[#0f172a]">
-                                {realModal.id ? "Détails Création." : "Nouveau Projet."}
-                            </h2>
-                        </div>
-                        
-                        {/* Live Image Preview */}
-                        <div className="mb-10 w-full aspect-[4/3] bg-gray-50 rounded-[2.5rem] flex items-center justify-center p-0 border-2 border-dashed border-gray-100 overflow-hidden relative group shadow-inner transition-all hover:bg-gray-100/50">
-                            {(previewUrl || realModal.imageUrl) ? (
-                                <img src={previewUrl || realModal.imageUrl || undefined} className="w-full h-full object-cover animate-in fade-in zoom-in duration-300" onError={() => setPreviewUrl("")} />
-                            ) : (
-                                <div className="text-gray-300 flex flex-col items-center gap-4">
-                                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 group-hover:scale-110 transition-transform">
-                                        <CameraIcon size={40} />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 mb-1">Visuel Portfolio</p>
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Image haute qualité recommandée</p>
-                                    </div>
-                                </div>
-                            )}
-                            <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer backdrop-blur-sm">
-                                <CloudUpload className="text-white" size={48} />
-                                <p className="text-white font-black text-[12px] uppercase tracking-[0.2em] mt-4">Uploader Photo</p>
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            const url = await handleFileUpload(file);
-                                            if (url) setPreviewUrl(url);
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </div>
-
-                        <form className="space-y-8" onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                                const formData = new FormData(e.currentTarget);
-                                const updatedReal = {
-                                    title: formData.get("title") as string,
-                                    category: formData.get("category") as string,
-                                    imageUrl: previewUrl || (formData.get("imageUrl") as string) || (realModal.imageUrl as string),
-                                    price: formData.get("price") as string,
-                                    oldPrice: formData.get("oldPrice") as string,
-                                    rating: Number(formData.get("rating")) || 5,
-                                    badge: formData.get("badge") as string,
-                                    createdAt: realModal.createdAt || Date.now()
-                                };
-
-                                if (realModal.id) {
-                                    await updateReal(realModal.id, updatedReal);
-                                } else {
-                                    await addReal(updatedReal as any);
-                                }
-                                setRealModal(null);
-                                alert("✅ Portfolio mis à jour !");
-                            } catch (err: any) {
-                                console.error("Real submit error:", err);
-                                alert(`❌ Erreur: ${err.message}`);
-                            }
-                        }}>
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Nom du Projet / Produit *</label>
-                                        <input required name="title" defaultValue={realModal.title} className="admin-input-refined text-lg" placeholder="Djapero Fresh Pack..." />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Catégorie *</label>
-                                        <input required name="category" defaultValue={realModal.category} className="admin-input-refined text-lg" placeholder="Agro-Industrie" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Badge (Ex: 50% off)</label>
-                                        <input name="badge" defaultValue={realModal.badge} className="admin-input-refined text-lg" placeholder="50% off" />
-                                    </div>
-                                </div>
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Prix Actuel</label>
-                                            <input name="price" defaultValue={realModal.price} className="admin-input-refined" placeholder="30.00 $" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Prix Promo</label>
-                                            <input name="oldPrice" defaultValue={realModal.oldPrice} className="admin-input-refined" placeholder="60.00 $" />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Note (1-5)</label>
-                                        <input type="number" step="0.1" max="5" min="0" name="rating" defaultValue={realModal.rating || 5} className="admin-input-refined" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">URL Image Alternative</label>
-                                        <input name="imageUrl" defaultValue={realModal.imageUrl} onChange={(e) => setPreviewUrl(e.target.value)} className="admin-input-refined text-[10px] truncate" placeholder="https://..." />
-                                    </div>
-                                </div>
-                             </div>
-                            
-                            <button type="submit" className="w-full bg-[#ffbe0b] text-black py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-yellow-500 transition-all hover:scale-[1.02] active:scale-95">
-                                Publier dans le Portfolio
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-            {/* Hero Modal */}
-            {heroModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setHeroModal(null)}>
-                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-12 !bg-[#064e3b] rounded-[3rem] md:rounded-[4rem] w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-full no-scrollbar !text-white" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-8 right-8 text-white/40 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10" onClick={() => setHeroModal(null)}><X size={28}/></button>
-                        
-                        <div className="mb-10">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="w-10 h-1 bg-[#a3e635] rounded-full" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-[#a3e635]">Hero Header Design</span>
-                            </div>
-                            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.85] text-white">
-                                {heroModal.id ? "Modifier l'En-tête." : "Nouvel En-tête."}
-                            </h2>
-                        </div>
-
-                        <div className="mb-10 w-full h-64 bg-white/5 rounded-[2.5rem] flex items-center justify-center p-6 border-2 border-dashed border-white/10 overflow-hidden relative group shadow-inner transition-all">
-                            {uploading ? (
-                                <div className="text-center w-full px-12">
-                                    <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden mb-4">
-                                        <motion.div 
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${uploadProgress}%` }}
-                                            className="h-full bg-[#a3e635] shadow-[0_0_15px_rgba(163,230,53,0.5)]"
-                                        />
-                                    </div>
-                                    <p className="text-[#a3e635] text-[10px] font-black uppercase tracking-widest animate-pulse">Importation Djapero... {uploadProgress}%</p>
-                                </div>
-                            ) : (previewUrl || heroModal.imageUrl) ? (
-                                <img src={previewUrl || heroModal.imageUrl} className="w-full h-full object-cover rounded-3xl" onError={() => setPreviewUrl("")} />
-                            ) : (
-                                <div className="text-white/20 flex flex-col items-center gap-4">
-                                    <Monitor size={48} className="opacity-20" />
-                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Aperçu Visuel En-tête</p>
-                                </div>
-                            )}
-                            {!uploading && (
-                                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer backdrop-blur-sm">
-                                    <CloudUpload className="text-white" size={48} />
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        accept="image/*"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                const url = await handleFileUpload(file);
-                                                if (url) setPreviewUrl(url);
-                                            }
-                                        }}
-                                    />
-                                </label>
-                            )}
-                        </div>
-
-                        <form className="space-y-8" onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                                const formData = new FormData(e.currentTarget);
-                                const heroData = {
-                                    title: formData.get("title") as string,
-                                    subtitle: formData.get("subtitle") as string,
-                                    heading: formData.get("heading") as string,
-                                    imageUrl: previewUrl || (formData.get("imageUrl") as string) || (heroModal.imageUrl as string),
-                                    videoUrl: formData.get("videoUrl") as string,
-                                    active: formData.get("active") === "true",
-                                    createdAt: heroModal.createdAt || Date.now()
-                                };
-
-                                if (!heroData.imageUrl) {
-                                    alert("❌ Veuillez ajouter une image pour l'en-tête.");
-                                    return;
-                                }
-
-                                if (heroModal.id) {
-                                    await updateHeroBanner(heroModal.id, heroData);
-                                } else {
-                                    await addHeroBanner(heroData as any);
-                                }
-                                setHeroModal(null);
-                                setPreviewUrl("");
-                                alert("✅ En-tête dashboard mis à jour !");
-                            } catch (err: any) {
-                                alert(`❌ Erreur: ${err.message}`);
-                            }
-                        }}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Petit Titre (Logo)</label>
-                                        <input required name="title" defaultValue={heroModal.title || "Tableau de Bord."} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-black" placeholder="Tableau de Bord." />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Sous-Titre (Description)</label>
-                                        <input required name="subtitle" defaultValue={heroModal.subtitle || "ESPACE D'EXCELLENCE DJAPERO."} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-bold text-xs uppercase tracking-widest" placeholder="ESPACE D'EXCELLENCE..." />
-                                    </div>
-                                </div>
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Statut</label>
-                                        <select name="active" defaultValue={heroModal.active === false ? "false" : "true"} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-black appearance-none cursor-pointer">
-                                            <option value="true" className="bg-[#064e3b]">Actif (Affiché)</option>
-                                            <option value="false" className="bg-[#064e3b]">Inactif (Masqué)</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">Gros Titre (Slogan)</label>
-                                        <input name="heading" defaultValue={heroModal.heading || "COMMANDER VOS FAVORIS."} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all font-black text-xl italic" placeholder="COMMANDER VOS FAVORIS." />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">URL Vidéo Intro (YouTube ou Direct)</label>
-                                        <input name="videoUrl" defaultValue={heroModal.videoUrl} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all text-xs" placeholder="https://youtube.com/watch?v=... ou .mp4" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-4">URL Image Header</label>
-                                <input name="imageUrl" defaultValue={heroModal.imageUrl} onChange={(e) => setPreviewUrl(e.target.value)} className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl text-white outline-none focus:border-[#a3e635] transition-all text-xs" placeholder="https://..." />
-                            </div>
-                            <button 
-                                id="submit-hero-btn"
-                                type="submit" 
-                                className="w-full bg-[#a3e635] text-black py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-white transition-all hover:scale-[1.02]"
-                            >
-                                {heroModal.id ? "Enregistrer les modifications" : "Publier l'En-tête"}
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-            {/* Ad Modal */}
-            {adModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setAdModal(null)}>
-                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-12 bg-white rounded-[3rem] md:rounded-[4rem] w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-full no-scrollbar" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50" onClick={() => setAdModal(null)}><X size={28}/></button>
-                        
-                        <div className="mb-10">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="w-10 h-1 bg-pink-500 rounded-full" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-pink-600">Advertising Elite</span>
-                            </div>
-                            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.85] text-[#0f172a]">
-                                {adModal.id ? "Modifier l'Affiche." : "Nouvelle Affiche."}
-                            </h2>
-                        </div>
-
-                        <div className="mb-10 w-full h-64 bg-gray-50 rounded-[2.5rem] flex items-center justify-center p-6 border-2 border-dashed border-gray-100 overflow-hidden relative group shadow-inner transition-all">
-                            {uploading ? (
-                                <div className="text-center w-full px-12">
-                                    <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden mb-4">
-                                        <motion.div 
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${uploadProgress}%` }}
-                                            className="h-full bg-pink-500"
-                                        />
-                                    </div>
-                                    <p className="text-pink-600 text-[10px] font-black uppercase tracking-widest animate-pulse">Envoi de l'affiche... {uploadProgress}%</p>
-                                </div>
-                            ) : (previewUrl || adModal.imageUrl) ? (
-                                <img src={previewUrl || adModal.imageUrl} className="w-full h-full object-cover rounded-3xl" onError={() => setPreviewUrl("")} />
-                            ) : (
-                                <div className="text-gray-300 flex flex-col items-center gap-4">
-                                    <ImageIcon size={48} className="opacity-20" />
-                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Aperçu de l'affiche</p>
-                                </div>
-                            )}
-                            {!uploading && (
-                                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer backdrop-blur-sm">
-                                    <CloudUpload className="text-white" size={48} />
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        accept="image/*"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                const url = await handleFileUpload(file);
-                                                if (url) setPreviewUrl(url);
-                                            }
-                                        }}
-                                    />
-                                </label>
-                            )}
-                        </div>
-
-                        <form className="space-y-8" onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                                const formData = new FormData(e.currentTarget);
-                                const adData = {
-                                    title: formData.get("title") as string,
-                                    subtitle: formData.get("subtitle") as string,
-                                    imageUrl: previewUrl || (formData.get("imageUrl") as string) || (adModal.imageUrl as string),
-                                    link: formData.get("link") as string,
-                                    active: formData.get("active") === "true",
-                                    createdAt: adModal.createdAt || Date.now()
-                                };
-
-                                if (!adData.imageUrl) {
-                                    alert("❌ Veuillez ajouter une image pour l'affiche.");
-                                    return;
-                                }
-
-                                if (adModal.id) {
-                                    await updateAd(adModal.id, adData);
-                                } else {
-                                    await addAd(adData as any);
-                                }
-                                setAdModal(null);
-                                setPreviewUrl("");
-                                alert("✅ Affiche enregistrée !");
-                            } catch (err: any) {
-                                alert(`❌ Erreur: ${err.message}`);
-                            }
-                        }}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Titre de l'affiche *</label>
-                                        <input required name="title" defaultValue={adModal.title} className="admin-input-refined text-lg" placeholder="EX: PROMO LADOUM" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Sous-titre / Info *</label>
-                                        <input required name="subtitle" defaultValue={adModal.subtitle} className="admin-input-refined" placeholder="EX: -20% SUR TOUTE LA FERME" />
-                                    </div>
-                                </div>
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Statut</label>
-                                        <select name="active" defaultValue={adModal.active === false ? "false" : "true"} className="admin-input-refined">
-                                            <option value="true">Active (Affichée)</option>
-                                            <option value="false">Inactive (Masquée)</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">Lien (Action)</label>
-                                        <input name="link" defaultValue={adModal.link} className="admin-input-refined" placeholder="/marché" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-4">URL Image Alternative</label>
-                                <input name="imageUrl" defaultValue={adModal.imageUrl} onChange={(e) => setPreviewUrl(e.target.value)} className="admin-input-refined text-xs" placeholder="https://..." />
-                            </div>
-                            <button type="submit" className="w-full bg-pink-500 text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-pink-600 transition-all hover:scale-[1.02]">
-                                Enregistrer l'affiche
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-            {/* Market Modal */}
-            {marketModal && (
-                <div className="modal-overlay px-4 py-8" onClick={() => setMarketModal(null)}>
-                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="modal-card p-6 md:p-12 bg-white rounded-[3rem] md:rounded-[4rem] w-full max-w-2xl shadow-2xl relative overflow-y-auto max-h-full no-scrollbar" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50" onClick={() => setMarketModal(null)}><X size={28}/></button>
-                        
-                        <div className="mb-10">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="w-10 h-1 bg-orange-500 rounded-full" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">Marketplace Entry</span>
-                            </div>
-                            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-[0.85] text-[#0f172a]">
-                                {marketModal.id ? "Détails de l'article." : "Ajouter au Marché."}
-                            </h2>
-                        </div>
-
-                        {/* Live Image Preview */}
-                        <div className="mb-10 w-full h-64 bg-gray-50 rounded-[2.5rem] flex items-center justify-center p-6 border-2 border-dashed border-gray-100 overflow-hidden relative group shadow-inner transition-all hover:bg-gray-100/50">
-                            {(previewUrl || marketModal.imageUrl) ? (
-                                <div className="relative w-full h-full flex items-center justify-center">
-                                    <img 
-                                        src={previewUrl || marketModal.imageUrl || undefined} 
-                                        className={`max-h-full max-w-full object-contain transition-all duration-500 rounded-3xl ${uploading ? 'opacity-30 blur-sm' : 'opacity-100 blur-0'}`} 
-                                        onError={() => setPreviewUrl("")} 
-                                    />
-                                    {uploading && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                                            <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-                                            <p className="text-orange-600 font-black text-xs uppercase tracking-widest animate-pulse">Chargement...</p>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="text-gray-300 flex flex-col items-center gap-4">
-                                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 group-hover:scale-110 transition-transform">
-                                        <CameraIcon size={40} />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 mb-1">Aperçu Photo Marché</p>
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Image de couverture</p>
-                                    </div>
-                                </div>
-                            )}
-                            {!uploading && (
-                                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer backdrop-blur-sm">
-                                    <div className="flex flex-col items-center gap-4 transform translate-y-4 group-hover:translate-y-0 transition-transform">
-                                        <CloudUpload className="text-white" size={48} />
-                                        <p className="text-white font-black text-[12px] uppercase tracking-[0.2em]">Charger une image</p>
-                                    </div>
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        accept="image/*"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                const url = await handleFileUpload(file);
-                                                if (url) {
-                                                    setPreviewUrl(url);
-                                                }
-                                            }
-                                        }}
-                                    />
-                                </label>
-                            )}
-                        </div>
-                        
-                        <form className="space-y-8" onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                                const formData = new FormData(e.currentTarget);
-                                const itemData = {
-                                    name: formData.get("name") as string,
-                                    category: formData.get("category") as string,
-                                    price: formData.get("price") as string,
-                                    location: formData.get("location") as string,
-                                    imageUrl: previewUrl || (formData.get("imageUrl") as string) || (marketModal.imageUrl as string),
-                                    shopName: formData.get("shopName") as string,
-                                    description: formData.get("description") as string,
-                                    phone: formData.get("phone") as string,
-                                    creatorId: marketModal.creatorId || user?.uid || "",
-                                    createdAt: marketModal.createdAt || Date.now()
-                                };
-
-                                if (marketModal.id) {
-                                    await updateMarketItem(marketModal.id, itemData);
-                                } else {
-                                    await addMarketItem(itemData as any);
-                                }
-
-                                setPreviewUrl("");
-                                setMarketModal(null);
-                                alert("✅ Article publié sur le marché !");
-                            } catch (err: any) {
-                                console.error("Market submit error:", err);
-                                let errorMsg = "Erreur lors de l'enregistrement.";
-                                try {
-                                    const parsed = JSON.parse(err.message);
-                                    errorMsg = parsed.error;
-                                } catch(e) {
-                                    errorMsg = err.message || errorMsg;
-                                }
-                                alert(`❌ ${errorMsg}`);
-                            }
-                        }}>
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Nom du produit *</label>
-                                        <input 
-                                            required 
-                                            name="name" 
-                                            value={marketModal.name || ""} 
-                                            onChange={e => setMarketModal({...marketModal, name: e.target.value})}
-                                            className="admin-input-refined text-lg" 
-                                            placeholder="Ladoum, Chips, etc." 
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Prix *</label>
-                                        <input 
-                                            required 
-                                            name="price" 
-                                            value={marketModal.price || ""} 
-                                            onChange={e => setMarketModal({...marketModal, price: e.target.value})}
-                                            className="admin-input-refined text-lg" 
-                                            placeholder="150 000" 
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                         <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Ville / Pays *</label>
-                                         <div className="flex items-center gap-3">
-                                             <div className="admin-input-icon-wrapper flex-1">
-                                                 <MapPin className="admin-input-icon text-orange-500" size={20} />
-                                                 <input 
-                                                     required 
-                                                     name="location" 
-                                                     value={marketModal.location || ""} 
-                                                     onChange={e => setMarketModal({...marketModal, location: e.target.value})}
-                                                     className="admin-input-with-icon text-lg" 
-                                                     placeholder="Dakar, Sénégal" 
-                                                 />
-                                             </div>
-                                             <button 
-                                                 type="button"
-                                                 id="geo-btn-admin-market"
-                                                 onClick={() => {
-                                                     if ("geolocation" in navigator) {
-                                                         const btn = document.getElementById('geo-btn-admin-market');
-                                                         if (btn) btn.classList.add('animate-pulse');
-                                                         navigator.geolocation.getCurrentPosition(async (position) => {
-                                                             try {
-                                                                 const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
-                                                                 const data = await res.json();
-                                                                 const city = data.address.city || data.address.town || data.address.village;
-                                                                 const country = data.address.country;
-                                                                 const locationStr = city ? `${city}, ${country}` : country;
-                                                                 setMarketModal({...marketModal, location: locationStr});
-                                                             } catch (err) {
-                                                                 alert("Erreur GPS.");
-                                                             } finally {
-                                                                 if (btn) btn.classList.remove('animate-pulse');
-                                                             }
-                                                         }, () => {
-                                                             alert("GPS désactivé.");
-                                                             if (btn) btn.classList.remove('animate-pulse');
-                                                         });
-                                                     }
-                                                 }}
-                                                 className="bg-orange-50 text-orange-600 h-[64px] w-[64px] rounded-2xl hover:bg-orange-100 transition-all flex items-center justify-center shrink-0 border border-orange-100/50 active:scale-95"
-                                                 title="Me localiser"
-                                             >
-                                                 <MapPin size={24} />
-                                             </button>
-                                         </div>
-                                     </div>
-                                </div>
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Catégorie *</label>
-                                        <div className="relative group">
-                                            <select 
-                                                name="category" 
-                                                value={marketModal.category || "legumes"} 
-                                                onChange={e => setMarketModal({...marketModal, category: e.target.value})}
-                                                className="admin-input-refined appearance-none cursor-pointer pr-16 text-lg"
-                                            >
-                                                <option value="legumes">Légumes & Fruits</option>
-                                                <option value="elevage">Élevage (Moutons...)</option>
-                                                <option value="snacks">Chips & Snacks</option>
-                                                <option value="biscuits">Biscuits</option>
-                                                <option value="accessoires">Accessoires / Autres</option>
-                                            </select>
-                                            <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-orange-500 transition-colors">
-                                                <Filter size={20} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Boutique (Optionnel)</label>
-                                        <div className="admin-input-icon-wrapper">
-                                            <StoreIcon className="admin-input-icon text-orange-500" size={20} />
-                                            <input 
-                                                name="shopName" 
-                                                value={marketModal.shopName || ""} 
-                                                onChange={e => setMarketModal({...marketModal, shopName: e.target.value})}
-                                                className="admin-input-with-icon text-lg" 
-                                                placeholder="ex: Ferme Bio" 
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Téléphone</label>
-                                        <div className="admin-input-icon-wrapper">
-                                            <Phone className="admin-input-icon text-orange-500" size={20} />
-                                            <input 
-                                                name="phone" 
-                                                value={marketModal.phone || ""} 
-                                                onChange={e => setMarketModal({...marketModal, phone: e.target.value})}
-                                                className="admin-input-with-icon text-lg" 
-                                                placeholder="+228..." 
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Description</label>
-                                <textarea 
-                                    name="description" 
-                                    value={marketModal.description || ""} 
-                                    onChange={e => setMarketModal({...marketModal, description: e.target.value})}
-                                    className="admin-input-refined h-32 py-4 resize-none" 
-                                    placeholder="Décrivez votre produit en quelques mots..."
-                                ></textarea>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">URL de l'image (automatique si uploadé)</label>
-                                <div className="admin-input-icon-wrapper">
-                                    <CameraIcon className="admin-input-icon text-gray-400" size={20} />
-                                    <input 
-                                        name="imageUrl" 
-                                        value={previewUrl || marketModal.imageUrl || ""} 
-                                        onChange={(e) => setPreviewUrl(e.target.value)}
-                                        className="admin-input-with-icon text-lg" 
-                                        placeholder="https://..." 
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4 pt-4">
-                                <button type="button" onClick={() => setMarketModal(null)} className="flex-1 py-5 rounded-2xl font-black uppercase tracking-widest text-gray-400 bg-gray-50 hover:bg-gray-100 transition-all">Annuler</button>
-                                <button type="submit" className="flex-[2] bg-[#0f172a] text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-2xl shadow-gray-400 hover:bg-orange-500 transition-all hover:scale-[1.02]">
-                                    {marketModal.id ? "Sauvegarder" : "Publier l'article"}
-                                </button>
-                            </div>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
-            {/* Notification Modal */}
-            {notifModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm" onClick={() => setNotifModal(null)}>
-                    <motion.div 
-                        initial={{ scale: 0.9, opacity: 0 }} 
-                        animate={{ scale: 1, opacity: 1 }} 
-                        className="bg-white w-full max-w-lg rounded-[3rem] p-8 md:p-12 relative shadow-2xl" 
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <button 
-                            className="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors" 
-                            onClick={() => setNotifModal(null)}
-                        >
-                            <X size={32} />
-                        </button>
-
-                        <div className="mb-8">
-                            <h2 className="text-3xl font-black tracking-tighter text-[#0f172a] uppercase leading-none mb-2">Nouvelle <br/><span className="text-red-600" style={{ fontStyle: 'normal' }}>Alerte.</span></h2>
-                            <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest pl-1">Diffusez un message à la communauté.</p>
-                        </div>
-
-                        <form onSubmit={handleSendNotification} className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Titre du message</label>
-                                <input 
-                                    name="title" 
-                                    required 
-                                    className="w-full bg-gray-50 border border-gray-100 px-8 py-5 rounded-[1.5rem] text-gray-900 outline-none focus:bg-white focus:border-red-500 transition-all font-black text-lg" 
-                                    placeholder="ex: Promotion Spéciale !" 
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Contenu de la notification</label>
-                                <textarea 
-                                    name="message" 
-                                    required 
-                                    rows={4}
-                                    className="w-full bg-gray-50 border border-gray-100 px-8 py-5 rounded-[1.5rem] text-gray-900 outline-none focus:bg-white focus:border-red-500 transition-all font-bold text-sm" 
-                                    placeholder="Écrivez votre message ici..." 
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 ml-4">Type d'alerte</label>
-                                <select 
-                                    name="type" 
-                                    className="w-full bg-gray-50 border border-gray-100 px-8 py-5 rounded-[1.5rem] text-gray-900 outline-none focus:bg-white focus:border-red-500 transition-all font-black text-lg appearance-none cursor-pointer"
-                                >
-                                    <option value="info">Information (Bleu)</option>
-                                    <option value="warning">Avertissement (Orange)</option>
-                                    <option value="urgent">Urgent (Rouge)</option>
-                                </select>
-                            </div>
-
-                            <button 
-                                type="submit" 
-                                disabled={sendingNotif}
-                                className="w-full bg-red-600 text-white py-6 rounded-[2rem] font-black text-xl uppercase tracking-tighter flex items-center justify-center gap-4 shadow-2xl hover:bg-black transition-all active:scale-95 disabled:opacity-50"
-                            >
-                                {sendingNotif ? "Envoi en cours..." : <><Bell size={24} /> Envoyer la notification</>}
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

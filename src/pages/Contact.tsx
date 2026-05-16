@@ -1,16 +1,49 @@
-import { Phone, Mail, MapPin, Phone as WhatsApp, MessageSquare, Check } from "lucide-react";
+import { Phone, Mail, MapPin, Phone as WhatsApp, MessageSquare, Check, Send } from "lucide-react";
 import { useState } from "react";
 import { useData } from "../hooks/useData";
+import { db, auth } from "../lib/firebase";
+import { collection, addDoc } from "firebase/firestore";
+import { handleFirestoreError, OperationType } from "../lib/firestore-errors";
 import React from "react";
 
 export default function Contact() {
     const { data } = useData();
     const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
+    const [formData, setFormData] = useState({
+        name: "",
+        phone: "",
+        service: "Livraison de produits frais",
+        message: ""
+    });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setStatus("loading");
-        setTimeout(() => setStatus("success"), 1500);
+        
+        const pathForWrite = "messages";
+        try {
+            await addDoc(collection(db, pathForWrite), {
+                name: formData.name,
+                phone: formData.phone,
+                service: formData.service,
+                message: formData.message,
+                isRead: false,
+                createdAt: Date.now()
+            });
+            setStatus("success");
+            setTimeout(() => {
+                setStatus("idle");
+                setFormData({ name: "", phone: "", service: "Livraison de produits frais", message: "" });
+            }, 3000);
+        } catch (error) {
+            try {
+                handleFirestoreError(auth, error, OperationType.CREATE, pathForWrite);
+            } catch (wrappedError) {
+                console.error("Contact Form Error:", wrappedError);
+            }
+            alert("Erreur lors de l'envoi. Veuillez réessayer.");
+            setStatus("idle");
+        }
     };
 
     const waNumber = data?.settings.whatsapp || "22892052664";
@@ -75,15 +108,33 @@ export default function Contact() {
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-2">
                                 <label className="text-xs font-black uppercase tracking-widest text-[#10b981] ml-2">Nom complet</label>
-                                <input required type="text" placeholder="Votre nom" className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-300 font-medium" />
+                                <input 
+                                    required 
+                                    type="text" 
+                                    placeholder="Votre nom" 
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                    className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-300 font-medium" 
+                                />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-black uppercase tracking-widest text-[#10b981] ml-2">Numéro de téléphone</label>
-                                <input required type="tel" placeholder="+228 9X XX XX XX" className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-300 font-medium" />
+                                <input 
+                                    required 
+                                    type="tel" 
+                                    placeholder="+228 9X XX XX XX" 
+                                    value={formData.phone}
+                                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                                    className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-300 font-medium" 
+                                />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-black uppercase tracking-widest text-[#10b981] ml-2">Service désiré</label>
-                                <select className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all font-medium">
+                                <select 
+                                    value={formData.service}
+                                    onChange={(e) => setFormData({...formData, service: e.target.value})}
+                                    className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all font-medium"
+                                >
                                     <option>Livraison de produits frais</option>
                                     <option>Service de communication</option>
                                     <option>Les deux</option>
@@ -91,7 +142,13 @@ export default function Contact() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-black uppercase tracking-widest text-[#10b981] ml-2">Message</label>
-                                <textarea rows={4} placeholder="Que souhaitez-vous ?" className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-300 font-medium resize-none"></textarea>
+                                <textarea 
+                                    rows={4} 
+                                    placeholder="Que souhaitez-vous ?" 
+                                    value={formData.message}
+                                    onChange={(e) => setFormData({...formData, message: e.target.value})}
+                                    className="w-full bg-neutral-50 px-6 py-4 rounded-2xl border border-neutral-100 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-300 font-medium resize-none"
+                                ></textarea>
                             </div>
                             
                             <button 

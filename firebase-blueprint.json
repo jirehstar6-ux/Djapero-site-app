@@ -161,6 +161,49 @@
         "createdAt": { "type": "number" }
       },
       "required": ["title", "subtitle", "heading", "imageUrl", "active", "createdAt"]
+    },
+    "TeamMember": {
+      "title": "Team Member",
+      "description": "Information about a team member",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "img": { "type": "string" },
+        "phone": { "type": "string" },
+        "description": { "type": "string" },
+        "prestations": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "role", "img", "createdAt"]
+    },
+    "Visit": {
+      "title": "Visit",
+      "description": "Log of a user visiting the application",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "path": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userAgent", "path", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "User message or inquiry",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "service": { "type": "string" },
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "phone", "message", "isRead", "createdAt"]
     }
   },
   "firestore": {
@@ -199,6 +242,18 @@
     "/heroBanners/{bannerId}": {
       "schema": "HeroBanner",
       "description": "Top dashboard hero banners"
+    },
+    "/team/{memberId}": {
+      "schema": "TeamMember",
+      "description": "Management of team members"
+    },
+    "/visits/{visitId}": {
+      "schema": "Visit",
+      "description": "Log of user visits"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "User messages and inquiries"
     },
     "/settings/main": {
       "schema": "Settings",

@@ -1,287 +1,442 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Search, MapPin, Tag, ShoppingCart, Filter, Coffee, Pizza, Layout, Heart, X, Phone, Store as StoreIcon } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useData, MarketItem } from '../hooks/useData';
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { 
+    ShoppingBag, 
+    Search, 
+    MapPin, 
+    Filter, 
+    Store as StoreIcon, 
+    Phone, 
+    Plus, 
+    X, 
+    LayoutDashboard, 
+    Shirt, 
+    Smartphone, 
+    Home as HomeIcon, 
+    Briefcase, 
+    Sparkles, 
+    Car, 
+    Package,
+    ArrowRight
+} from "lucide-react";
+import { useData } from "../hooks/useData";
 
-const MARKET_CATEGORIES = [
-    { id: 'all', label: 'Tout', icon: Layout },
-    { id: 'legumes', label: 'Légumes', icon: Heart },
-    { id: 'elevage', label: 'Moutons/Élevage', icon: Tag },
-    { id: 'snacks', label: 'Chips & Snacks', icon: Pizza },
-    { id: 'biscuits', label: 'Biscuits', icon: Coffee },
-    { id: 'accessoires', label: 'Accessoires', icon: ShoppingCart },
+import { useTheme } from "../context/ThemeContext";
+
+const categories = [
+    { id: "all", label: "Tout", icon: LayoutDashboard },
+    { id: "alimentation", label: "Alimentation", icon: ShoppingBag },
+    { id: "vetements", label: "Vêtements", icon: Shirt },
+    { id: "electronique", label: "Électronique", icon: Smartphone },
+    { id: "immobilier", label: "Immobilier", icon: HomeIcon },
+    { id: "services", label: "Services", icon: Briefcase },
+    { id: "beauté", label: "Beauté", icon: Sparkles },
+    { id: "auto", label: "Auto/Moto", icon: Car },
+    { id: "autres", label: "Autres", icon: Package },
 ];
 
-const Market = () => {
-    const { user, isAdmin } = useAuth();
-    const { data, loading, deleteMarketItem } = useData();
-    const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState('all');
-    const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
+export default function Market() {
+    const { data, loading } = useData();
+    const { theme } = useTheme();
+    const isLight = theme === 'light';
+    const [searchTerm, setSearchTerm] = useState("");
+    const [activeCategory, setActiveCategory] = useState("all");
+    const [selectedItem, setSelectedItem] = useState<any>(null);
+    const [showCategories, setShowCategories] = useState(true);
+    const [showMapsOptions, setShowMapsOptions] = useState(false);
 
-    const handleDeleteItem = async (itemId: string) => {
-        if (!data || !window.confirm("Supprimer cet article ?")) return;
-        try {
-            const success = await deleteMarketItem(itemId);
-            if (!success) alert("Erreur lors de la suppression.");
-        } catch (error) {
-            console.error("Error deleting item:", error);
-        }
-    };
-
-    if (loading || !data) return <div className="p-20 text-center font-black tracking-tighter text-emerald-600 animate-pulse">Chargement Marché...</div>;
-
-    const filteredItems = (data?.marketItems || []).filter(item => {
-        const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || 
-                             (item.description || '').toLowerCase().includes(search.toLowerCase());
-        const matchesTab = activeTab === 'all' || item.category === activeTab;
-        return matchesSearch && matchesTab;
+    const rawItems = data?.marketItems || [];
+    const [displayCount, setDisplayCount] = useState(10);
+    
+    const filteredItems = rawItems.filter(item => {
+        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             item.shopName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             item.location.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = activeCategory === "all" || item.category === activeCategory;
+        return matchesSearch && matchesCategory;
     });
 
-    return (
-        <div className="min-h-screen bg-[#f8fafc] pb-24 relative overflow-x-hidden">
-            {/* Africa Background Sketch - Improved */}
-            <div className="absolute top-20 right-[-10%] opacity-[0.05] pointer-events-none rotate-12">
-                <svg width="600" height="800" viewBox="0 0 100 130" fill="currentColor">
-                    <path d="M45,5 C55,4 65,5 75,10 C85,15 90,25 92,35 C94,45 90,55 85,65 C80,75 75,85 78,95 C80,105 85,115 82,125 C78,135 65,140 50,140 C35,140 20,135 15,125 C10,115 12,105 18,95 C25,85 28,75 22,65 C15,55 10,45 12,35 C15,25 25,15 35,8 C40,6 42,5 45,5 Z" 
-                          stroke="currentColor" strokeWidth="0.5" fill="none" />
-                    <path d="M35,30 L65,30 M40,60 L70,60 M30,90 L60,90" stroke="currentColor" strokeWidth="0.2" opacity="0.3" />
-                </svg>
+    const displayedItems = filteredItems.slice(0, displayCount);
+    const hasMore = filteredItems.length > displayCount;
+
+    if (loading) {
+        return (
+            <div className={`min-h-screen flex items-center justify-center transition-colors duration-500 ${isLight ? 'bg-gray-50' : theme === 'dark' ? 'bg-[#020617]' : 'bg-[#1b4332]'}`}>
+                <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
+        );
+    }
 
-            {/* Header / Search */}
-            <header className="bg-emerald-600 pt-32 pb-24 px-6 md:px-12 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-400 rounded-full blur-[100px] opacity-20 -translate-y-1/2 translate-x-1/2"></div>
-                <div className="max-w-4xl mx-auto relative z-10 text-center">
-                    <motion.h1 
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-4xl md:text-6xl font-black text-white tracking-tighter mb-8 uppercase"
-                    >
-                        Marché <span className="text-yellow-400">Djapero.</span>
-                    </motion.h1>
-                    
-                    <div className="relative group max-w-2xl mx-auto">
-                        <div className="absolute inset-0 bg-white/20 blur-xl rounded-full group-hover:bg-white/30 transition-all"></div>
-                        <div className="relative flex items-center bg-white rounded-full p-2 shadow-2xl border-4 border-emerald-500/20">
-                            <div className="pl-6 text-emerald-500">
-                                <Search size={24} />
-                            </div>
-                            <input 
-                                type="text"
-                                placeholder="Que cherchez-vous ? (Mouton, Chips, Légumes...)"
-                                className="flex-1 bg-transparent px-4 py-4 text-gray-800 font-bold outline-none placeholder:text-gray-400 text-lg"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                            <button className="bg-emerald-500 text-white px-8 py-4 rounded-full font-black uppercase tracking-tighter hover:bg-emerald-600 transition-all shadow-lg active:scale-95">
-                                Trouver
-                            </button>
-                        </div>
+    return (
+        <div className={`min-h-screen transition-colors duration-500 pb-20 ${isLight ? 'bg-white text-slate-900' : 'text-white'}`}>
+            {/* Header / Hero Section - Professional Light Theme */}
+            <div className={`pt-32 pb-24 px-4 relative overflow-hidden border-b transition-colors duration-500 ${isLight ? 'bg-white border-gray-100' : 'border-white/5'}`}>
+                {/* Subtle abstract background elements */}
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-500/5 rounded-full blur-[150px] -mr-48 -mt-48" />
+                <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-indigo-500/5 rounded-full blur-[120px] -ml-24 -mb-24" />
+                
+                <div className="max-w-7xl mx-auto relative z-10">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="max-w-2xl text-center md:text-left"
+                        >
+                            <span className="inline-block bg-orange-500/10 text-orange-600 px-4 py-1.5 rounded-full font-black uppercase tracking-[0.2em] text-[10px] mb-6 border border-orange-500/20">
+                                Marketplace Djapero
+                            </span>
+                            <h1 className={`text-5xl md:text-8xl font-black tracking-tight uppercase leading-[0.9] ${isLight ? 'text-gray-900' : 'text-white'}`}>
+                                Le Marché <br />
+                                <span className="text-orange-500">Local & Connecté.</span>
+                            </h1>
+                            <p className={`mt-8 font-medium text-lg md:text-xl leading-relaxed ${isLight ? 'text-gray-500' : 'text-white/60'}`}>
+                                Découvrez les meilleurs marchés d'Afrique du Sud et du Togo. <br className="hidden md:block" />
+                                <span className={`underline decoration-orange-500 decoration-2 underline-offset-8 ${isLight ? 'text-gray-900' : 'text-white'}`}>Trouvez vos légumes frais</span> et produits de qualité en un instant.
+                            </p>
+                        </motion.div>
                     </div>
-                </div>
-            </header>
 
-            {/* Categories */}
-            <section className="relative z-20 -mt-12">
-                <div className="max-w-7xl mx-auto px-6 md:px-12">
-                    <div className="flex overflow-x-auto gap-4 pb-8 no-scrollbar scroll-smooth">
-                        {MARKET_CATEGORIES.map((cat) => {
-                            const Icon = cat.icon;
-                            return (
-                                <button
-                                    key={cat.id}
-                                    onClick={() => setActiveTab(cat.id)}
-                                    className={`flex items-center gap-3 px-8 py-4 rounded-3xl font-black uppercase tracking-tighter whitespace-nowrap transition-all shadow-xl hover:-translate-y-1 active:scale-95 ${
-                                        activeTab === cat.id 
-                                        ? 'bg-yellow-400 text-black border-2 border-black/5' 
-                                        : 'bg-white text-gray-500 border-2 border-transparent hover:border-emerald-100 focus:outline-none'
+                    {/* Search Bar section on Dark Theme */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="max-w-5xl"
+                    >
+                        <div className="flex flex-col md:flex-row gap-3">
+                            <div className={`flex-1 relative group rounded-3xl border transition-all outline-none ${isLight ? 'bg-gray-50 border-gray-200 focus-within:bg-white focus-within:border-orange-500/50' : 'bg-white/5 border-white/10 focus-within:bg-white/10 focus-within:border-orange-500/50'}`}>
+                                <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+                                    <Search className="text-slate-400 group-focus-within:text-orange-500 transition-colors" size={24} />
+                                </div>
+                                <input 
+                                    type="text"
+                                    placeholder="Que cherchez-vous ? (Légumes, Élevage...)"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className={`w-full bg-transparent rounded-3xl pl-16 pr-5 py-6 outline-none text-base md:text-lg font-bold placeholder:text-slate-400 ${isLight ? 'text-gray-900' : 'text-white'}`}
+                                />
+                            </div>
+                            
+                            <div className="flex gap-3">
+                                <div className={`flex-1 md:w-64 relative group rounded-[2rem] border transition-all ${isLight ? 'bg-gray-50 border-gray-200 focus-within:bg-white focus-within:border-orange-500/50' : 'bg-white/5 border-white/10 focus-within:bg-white/10 focus-within:border-orange-500/50'}`}>
+                                    <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+                                        <MapPin className="text-slate-400 group-focus-within:text-orange-500 transition-colors" size={20} />
+                                    </div>
+                                    <select 
+                                        className={`w-full bg-transparent rounded-[2rem] pl-14 pr-10 py-6 outline-none text-sm font-bold appearance-none cursor-pointer ${isLight ? 'text-gray-900' : 'text-white'}`}
+                                        onChange={(e) => e.target.value && setSearchTerm(e.target.value)}
+                                    >
+                                        <option value="" className="text-black">Toutes zones</option>
+                                        <option value="Togo" className="text-black">Togo</option>
+                                        <option value="Afrique du Sud" className="text-black">Afrique du Sud</option>
+                                        <option value="Bénin" className="text-black">Bénin</option>
+                                    </select>
+                                    <div className="absolute inset-y-0 right-6 flex items-center pointer-events-none text-slate-500">
+                                        <ArrowRight size={16} className="rotate-90" />
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={() => setShowMapsOptions(!showMapsOptions)}
+                                    className={`px-8 py-6 rounded-3xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3 border shadow-sm ${
+                                        showMapsOptions 
+                                        ? "bg-orange-500 text-white border-orange-400 shadow-orange-500/20" 
+                                        : (isLight ? "bg-gray-100 text-gray-600 border-gray-200 hover:border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10")
                                     }`}
                                 >
-                                    <Icon size={18} />
-                                    {cat.label}
+                                    <img src="https://www.google.com/images/branding/product/2x/maps_96in128dp.png" alt="GMaps" className="w-5" />
+                                    <span className="hidden sm:inline">Explorer Maps</span>
                                 </button>
-                            );
-                        })}
-                        {/* Extra spacer for scroll ending */}
-                        <div className="min-w-[40px] h-4 md:hidden" aria-hidden="true" />
-                    </div>
-                </div>
-            </section>
 
-            {/* Grid */}
-            <main className="max-w-7xl mx-auto px-6 md:px-12 mt-16">
-                <div className="flex justify-between items-end mb-10">
-                    <div>
-                        <p className="text-emerald-500 font-black uppercase tracking-[0.3em] text-xs mb-2">Offres du jour</p>
-                        <h2 className="text-4xl font-black tracking-tighter text-gray-900 uppercase leading-[0.8]">De l'Afrique, Pour vous.</h2>
-                    </div>
-                    <div className="hidden md:flex gap-2">
-                        <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-emerald-50 hover:text-emerald-500 transition-colors">
-                            <Filter size={18} />
+                                <button 
+                                    onClick={() => setShowCategories(!showCategories)}
+                                    className={`px-8 py-6 rounded-3xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-3 border shadow-sm ${
+                                        showCategories 
+                                        ? (isLight ? "bg-white text-slate-900 border-white shadow-xl shadow-white/10" : "bg-white/20 text-white border-white/30 shadow-xl shadow-black/20")
+                                        : (isLight ? "bg-gray-100 text-gray-600 border-gray-200 hover:border-gray-300" : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10")
+                                    }`}
+                                >
+                                    <Filter size={20} strokeWidth={3} />
+                                    <span className="hidden sm:inline">Catégories</span>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 gap-3 md:gap-8 max-w-none">
-                    <AnimatePresence>
-                        {filteredItems.map((item, idx) => (
+                        <div className="flex flex-wrap gap-2 mt-6">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 py-2 items-center flex">Suggestions:</span>
+                            {['Légumes', 'Élevage', 'Lomé', 'Cape Town', 'Fruits'].map((tag) => (
+                                <button 
+                                    key={tag}
+                                    onClick={() => setSearchTerm(tag)}
+                                    className={`text-[10px] font-black uppercase tracking-widest px-5 py-2 rounded-xl transition-all border ${isLight ? 'text-slate-400 bg-gray-50 border-gray-100 hover:bg-orange-500 hover:text-white hover:border-orange-500' : 'text-white/40 bg-white/5 border-white/5 hover:bg-orange-500 hover:text-white hover:border-orange-500'}`}
+                                >
+                                    {tag}
+                                </button>
+                            ))}
+                        </div>
+
+                        <AnimatePresence>
+                            {showMapsOptions && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className={`mt-6 flex flex-wrap gap-3 backdrop-blur-sm p-6 rounded-3xl border ${isLight ? 'bg-gray-50 border-gray-100' : 'bg-white/5 border-white/10'}`}
+                                >
+                                    <div className="w-full mb-2">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Explorer les marchés locaux sur Google Maps</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => window.open('https://www.google.com/maps/search/marchés+de+légumes+Togo', '_blank')}
+                                        className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-sm flex items-center gap-3 border ${isLight ? 'bg-white text-gray-800 border-gray-100 hover:bg-orange-500 hover:text-white' : 'bg-white/10 text-white border-white/10 hover:bg-orange-500'}`}
+                                    >
+                                        <MapPin size={16} /> Togo
+                                    </button>
+                                    <button 
+                                        onClick={() => window.open('https://www.google.com/maps/search/markets+in+South+Africa+Cape+Town+Johannesburg', '_blank')}
+                                        className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-sm flex items-center gap-3 border ${isLight ? 'bg-white text-gray-800 border-gray-100 hover:bg-indigo-500 hover:text-white' : 'bg-white/10 text-white border-white/10 hover:bg-indigo-500'}`}
+                                    >
+                                        <MapPin size={16} /> South Africa
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
+                </div>
+            </div>
+
+            {/* Categories scroll - Cleaner design */}
+            <AnimatePresence>
+                {showCategories && (
+                    <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className={`sticky top-0 z-40 backdrop-blur-xl border-b transition-colors duration-500 ${isLight ? 'bg-white/90 border-slate-100 shadow-sm' : 'bg-[#020617]/80 border-white/5'}`}
+                    >
+                        <div className="max-w-7xl mx-auto px-4">
+                            <div className="flex items-center gap-3 overflow-x-auto py-6 no-scrollbar">
+                                {categories.map((cat) => (
+                                    <button
+                                        key={cat.id}
+                                        onClick={() => setActiveCategory(cat.id)}
+                                        className={`flex items-center gap-3 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] whitespace-nowrap transition-all border ${
+                                            activeCategory === cat.id 
+                                            ? "bg-orange-500 text-white border-orange-400 shadow-xl shadow-orange-500/20" 
+                                            : (isLight ? "bg-slate-50 text-slate-400 hover:bg-white hover:text-slate-900 border-slate-100" : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white border-white/5")
+                                        }`}
+                                    >
+                                        <cat.icon size={16} strokeWidth={3} />
+                                        {cat.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Main Content Grid - Improved Cards */}
+            <div className="max-w-7xl mx-auto px-4 mt-12 mb-20">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 md:gap-10">
+                    <AnimatePresence mode="popLayout">
+                        {displayedItems.map((item) => (
                             <motion.div
                                 layout
                                 key={item.id}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: idx * 0.02 }}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
                                 onClick={() => setSelectedItem(item)}
-                                className="group relative bg-[#0f172a] rounded-[3.5rem] p-4 border border-white/5 hover:border-[#a3e635]/30 shadow-[0_40px_80px_rgba(0,0,0,0.4)] transition-all duration-500 cursor-pointer flex flex-col h-full"
+                                className={`group rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border cursor-pointer flex flex-col h-full ${isLight ? 'bg-white border-slate-100' : 'bg-[#0f172a] border-white/5'}`}
                             >
-                                {(isAdmin || (user && user.uid === item.creatorId)) && (
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteItem(item.id);
-                                        }}
-                                        className="absolute top-6 left-6 z-20 bg-red-500/90 backdrop-blur-md text-white p-2.5 rounded-2xl shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                )}
-
-                                <div className="relative aspect-[4/5] overflow-hidden rounded-[2.5rem] mb-6">
-                                    <motion.img 
-                                        src={item.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'} 
-                                        className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-110" 
+                                {/* Image Container */}
+                                <div className={`aspect-[4/5] overflow-hidden relative ${isLight ? 'bg-slate-50' : 'bg-black/20'}`}>
+                                    <img 
+                                        src={item.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400"} 
                                         alt={item.name}
-                                        onError={(e) => {
-                                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800';
-                                        }}
+                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                                     />
-                                    <div className="absolute top-4 right-4 bg-[#a3e635] text-black px-4 py-1.5 rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg z-10">
-                                        NOUVEAU
-                                    </div>
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                                </div>
-
-                                <div className="px-2 pb-4 flex flex-col flex-grow">
-                                    <div className="flex justify-between items-baseline mb-1">
-                                        <h3 className="text-xl md:text-2xl font-[1000] text-white uppercase tracking-tighter truncate max-w-[65%]">{item.name}</h3>
-                                        <span className="text-xl md:text-2xl font-[1000] text-[#a3e635] italic tracking-tighter flex items-baseline">
-                                            {item.price} 
-                                            <span className="text-[10px] opacity-40 uppercase tracking-widest ml-1 font-black underline-offset-2">FCFA</span>
+                                    <div className="absolute top-5 left-5 bg-white/95 backdrop-blur-md px-4 py-1.5 rounded-xl shadow-sm border border-slate-100">
+                                        <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">
+                                            {item.category}
                                         </span>
                                     </div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#a3e635]/30 mb-8">
-                                        {MARKET_CATEGORIES.find(c => c.id === item.category)?.label || item.category}
-                                    </p>
+                                    <div className="absolute bottom-5 left-5 right-5 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity translate-y-2 group-hover:translate-y-0 duration-300">
+                                         <div className="w-12 h-12 bg-orange-500 text-white rounded-2xl flex items-center justify-center shadow-xl">
+                                             <Plus size={24} strokeWidth={3} />
+                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Content */}
+                                <div className="p-8 flex-1 flex flex-col">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="w-6 h-0.5 bg-orange-500/30 rounded-full" />
+                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{item.shopName}</span>
+                                    </div>
+                                    <h3 className={`text-xl font-black uppercase tracking-tighter leading-tight mb-4 line-clamp-2 min-h-[3rem] ${isLight ? 'text-slate-800' : 'text-white'}`}>
+                                        {item.name}
+                                    </h3>
                                     
-                                    <button className="w-full py-5 rounded-[1.8rem] bg-white text-black font-[1000] uppercase text-[10px] tracking-[0.2em] hover:bg-[#a3e635] transition-all shadow-xl group-hover:scale-[1.02] active:scale-95">
-                                        Détails du Produit
-                                    </button>
+                                    <div className={`mt-auto flex items-center justify-between pt-6 border-t ${isLight ? 'border-slate-50' : 'border-white/5'}`}>
+                                        <div className="flex flex-col">
+                                            <span className={`text-2xl font-black transition-colors ${isLight ? 'text-slate-900 group-hover:text-orange-500' : 'text-white group-hover:text-orange-500'}`}>
+                                                {item.price} <span className="text-[10px] text-slate-400">XAF</span>
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-slate-300 group-hover:text-amber-500 transition-colors">
+                                            <MapPin size={12} strokeWidth={3} />
+                                            <span className="text-[9px] font-black uppercase tracking-widest">{item.location}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </motion.div>
                         ))}
                     </AnimatePresence>
                 </div>
 
-                {filteredItems.length === 0 && (
-                    <div className="py-24 text-center">
-                        <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <Search size={40} className="text-gray-300" />
-                        </div>
-                        <h3 className="text-2xl font-black text-gray-400 uppercase tracking-tighter text-center">Aucun résultat trouvé</h3>
-                        <p className="text-gray-400 mt-2 font-medium">Réessayez avec d'autres mots-clés ou explorez nos catégories.</p>
+                {hasMore && (
+                    <div className="mt-12 flex justify-center">
+                        <button 
+                            onClick={() => setDisplayCount(prev => prev + 10)}
+                            className="bg-orange-500 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-all shadow-xl shadow-orange-500/20 active:scale-95"
+                        >
+                            Voir Plus d'Articles
+                        </button>
                     </div>
                 )}
-            </main>
 
-            {/* Product Detail Modal */}
+                {filteredItems.length === 0 && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className={`text-center py-20 rounded-[3rem] border-2 border-dashed mt-8 ${isLight ? 'bg-white border-gray-100' : 'bg-white/5 border-white/10'}`}
+                    >
+                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Search className="text-gray-200" size={32} />
+                        </div>
+                        <h3 className={`text-2xl font-black uppercase tracking-tighter ${isLight ? 'text-gray-900' : 'text-white'}`}>Aucun article trouvé</h3>
+                        <p className="text-gray-400 font-medium mt-2">Essayez d'autres mots-clés ou modifiez les filtres.</p>
+                        <button 
+                            onClick={() => { setSearchTerm(""); setActiveCategory("all"); }}
+                            className="mt-6 px-8 py-3 bg-[#0f172a] text-white rounded-full font-black uppercase text-[10px] tracking-widest hover:bg-orange-500 transition-all border border-white/10"
+                        >
+                            Réinitialiser
+                        </button>
+                    </motion.div>
+                )}
+            </div>
+
+            {/* Detail Modal */}
             <AnimatePresence>
                 {selectedItem && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedItem(null)}>
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                         <motion.div 
-                            initial={{ scale: 0.9, opacity: 0, y: 30 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.9, opacity: 0, y: 30 }}
-                            className="bg-white w-full max-w-4xl rounded-[3rem] overflow-hidden shadow-2xl relative flex flex-col md:flex-row h-full max-h-[85vh] lg:max-h-[700px]"
-                            onClick={e => e.stopPropagation()}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelectedItem(null)}
+                            className={`absolute inset-0 backdrop-blur-md ${isLight ? 'bg-white/60' : 'bg-black/80'}`}
+                        />
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className={`relative w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh] z-10 border ${isLight ? 'bg-white border-white' : 'bg-[#0f172a] border-white/10'}`}
                         >
                             <button 
-                                className="absolute top-6 right-6 z-10 w-12 h-12 bg-black/10 hover:bg-black/20 text-black flex items-center justify-center rounded-full transition-all active:scale-90"
                                 onClick={() => setSelectedItem(null)}
+                                className="absolute top-4 right-4 md:top-8 md:right-8 z-50 p-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all text-gray-900 active:scale-95"
                             >
-                                <X size={24} />
+                                <X size={20} />
                             </button>
 
-                            <div className="w-full md:w-1/2 bg-white relative overflow-hidden group flex items-center justify-center">
+                            {/* Left Side: Image */}
+                            <div className="w-full md:w-1/2 h-64 md:h-auto bg-gray-50 overflow-hidden relative">
                                 <img 
-                                    src={selectedItem.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800'} 
-                                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                                    src={selectedItem.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
                                     alt={selectedItem.name}
+                                    className="w-full h-full object-cover"
                                 />
-                                <div className="absolute top-8 left-8 z-10">
-                                    <span className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black text-xl shadow-2xl">
-                                        {selectedItem.price} FCFA
-                                    </span>
+                                <div className="absolute top-4 left-4 bg-orange-500 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl ring-2 ring-white">
+                                    Article du Marché
                                 </div>
                             </div>
 
-                            <div className="w-full md:w-1/2 p-8 md:p-12 overflow-y-auto no-scrollbar flex flex-col bg-white">
-                                <div className="mb-8">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500 bg-emerald-50 px-4 py-1.5 rounded-full">
-                                            Exclusivité Djapero
+                            {/* Right Side: Content */}
+                            <div className="w-full md:w-1/2 p-6 md:p-12 flex flex-col overflow-y-auto no-scrollbar">
+                                <div className="mb-6">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-8 h-1 bg-orange-500 rounded-full" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                                            {selectedItem.category}
                                         </span>
                                     </div>
-                                    <h2 className="text-4xl md:text-5xl font-black tracking-tighter text-[#0f172a] uppercase leading-[0.85] mb-6">
+                                    <h2 className={`text-3xl md:text-5xl font-black uppercase tracking-tighter leading-none mb-4 ${isLight ? 'text-gray-900' : 'text-white'}`}>
                                         {selectedItem.name}
                                     </h2>
-                                    
-                                    <div className="grid grid-cols-2 gap-4 mb-8">
-                                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                            <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1">Locatisation</p>
-                                            <div className="flex items-center gap-2 text-[#0f172a] font-bold text-xs uppercase tracking-tighter">
-                                                <MapPin size={14} className="text-orange-500" />
-                                                {selectedItem.location}
-                                            </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className={`px-6 py-3 rounded-2xl border ${isLight ? 'bg-orange-50 border-orange-100' : 'bg-orange-500/10 border-orange-500/20'}`}>
+                                            <span className="text-2xl font-black text-orange-600">{selectedItem.price}</span>
                                         </div>
-                                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                            <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1">Source</p>
-                                            <div className="flex items-center gap-2 text-[#0f172a] font-bold text-xs uppercase tracking-tighter">
-                                                <StoreIcon size={14} className="text-emerald-500" />
-                                                {selectedItem.shopName || "Producteur local"}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="group bg-[#f8fafc] p-6 rounded-3xl mb-8 border border-[#e2e8f0]/30">
-                                        <p className="text-gray-500 leading-relaxed font-medium text-sm md:text-base">
-                                            {selectedItem.description || "Ce produit d'exception a été sélectionné avec soin par l'équipe Djapero pour garantir une fraîcheur et une qualité inégalées à nos clients. Commandez maintenant pour un goût authentique de l'Afrique."}
-                                        </p>
                                     </div>
                                 </div>
 
-                                <div className="mt-auto pt-8 border-t border-gray-100 space-y-4">
-                                    <a 
-                                        href={`https://wa.me/${selectedItem.phone || '22800000000'}?text=${encodeURIComponent(`Bonjour Djapero ! Je souhaite commander le produit : ${selectedItem.name} (${selectedItem.price} FCFA)`)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="w-full bg-[#25D366] text-white py-5 px-8 rounded-3xl font-black text-xl md:text-2xl uppercase tracking-tighter flex items-center justify-center gap-4 shadow-[0_20px_50px_rgba(37,211,102,0.3)] hover:bg-black transition-all active:scale-95 group relative overflow-hidden text-center leading-tight"
-                                    >
-                                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12" />
-                                        <Phone size={24} className="group-hover:rotate-12 transition-transform shrink-0" />
-                                        <span>Commander Maintenant</span>
-                                    </a>
-                                    <div className="flex justify-center gap-6">
-                                         <div className="flex items-center gap-2">
-                                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                                             <span className="text-[10px] font-black text-[#0f172a] uppercase tracking-widest">Paiement Mobile</span>
-                                         </div>
-                                         <div className="flex items-center gap-2">
-                                             <div className="w-2 h-2 bg-orange-500 rounded-full" />
-                                             <span className="text-[10px] font-black text-[#0f172a] uppercase tracking-widest">Livraison Rapide</span>
-                                         </div>
+                                <div className={`space-y-6 mb-8 p-6 md:p-8 rounded-3xl border ${isLight ? 'bg-gray-50 border-gray-100' : 'bg-white/5 border-white/10'}`}>
+                                    <div className="flex items-center gap-4 group">
+                                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-orange-500 shadow-sm border border-orange-50 group-hover:scale-110 transition-transform">
+                                            <StoreIcon size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendeur / Boutique</p>
+                                            <p className={`font-black group-hover:text-orange-500 transition-colors uppercase tracking-tight ${isLight ? 'text-gray-900' : 'text-white'}`}>{selectedItem.shopName}</p>
+                                        </div>
                                     </div>
+
+                                    <div className="flex items-center gap-4 group">
+                                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-orange-500 shadow-sm border border-orange-50 group-hover:scale-110 transition-transform">
+                                            <MapPin size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Localisation</p>
+                                            <p className={`font-black group-hover:text-orange-500 transition-colors uppercase tracking-tight ${isLight ? 'text-gray-900' : 'text-white'}`}>{selectedItem.location}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mb-10">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
+                                        Description de l'article
+                                    </h4>
+                                    <p className={`font-medium leading-relaxed ${isLight ? 'text-gray-500' : 'text-white/60'}`}>
+                                        {selectedItem.description || "Aucune description détaillée fournie pour cet article."}
+                                    </p>
+                                </div>
+
+                                <div className="mt-auto flex flex-col gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <a 
+                                            href={`https://wa.me/${selectedItem.phone || '22892052664'}?text=Bonjour, je suis intéressé par votre article "${selectedItem.name}" sur Djapero Marché.`}
+                                            target="_blank"
+                                            className="flex items-center justify-center gap-3 py-5 bg-[#25D366] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl hover:scale-[1.02] active:scale-95 group"
+                                        >
+                                            <Phone size={20} className="group-hover:rotate-12 transition-transform" /> WhatsApp
+                                        </a>
+                                        <a 
+                                            href={`tel:${selectedItem.phone || '22892052664'}`}
+                                            className={`flex items-center justify-center gap-3 py-5 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl hover:scale-[1.02] active:scale-95 ${isLight ? 'bg-[#0f172a] text-white hover:bg-orange-500' : 'bg-[#a3e635] text-black hover:bg-white'}`}
+                                        >
+                                            <Phone size={20} /> Appeler
+                                        </a>
+                                    </div>
+                                    <button 
+                                        onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(selectedItem.name + ' ' + selectedItem.location)}`, '_blank')}
+                                        className={`flex items-center justify-center gap-3 py-5 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-sm hover:scale-[1.02] active:scale-95 border-2 ${isLight ? 'bg-white border-slate-100 text-slate-800 hover:border-orange-500 hover:text-orange-500' : 'bg-white/5 border-white/10 text-white hover:border-orange-500 hover:text-orange-500'}`}
+                                    >
+                                        <MapPin size={20} /> Voir sur Google Maps
+                                    </button>
                                 </div>
                             </div>
                         </motion.div>
@@ -289,55 +444,23 @@ const Market = () => {
                 )}
             </AnimatePresence>
 
-            {/* Google Maps Geographic Section */}
-            <section className="max-w-7xl mx-auto px-6 md:px-12 mt-24">
-                <div className="bg-white rounded-[3rem] overflow-hidden shadow-2xl border border-gray-100 flex flex-col lg:flex-row min-h-[500px]">
-                    <div className="p-10 md:p-16 lg:w-1/2 flex flex-col justify-center relative overflow-hidden">
-                        <div className="absolute top-[-20%] left-[-10%] w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50"></div>
-                        <div className="relative z-10">
-                            <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-emerald-200">
-                                <MapPin size={32} className="text-white" />
-                            </div>
-                            <h2 className="text-4xl md:text-5xl font-black tracking-tighter text-gray-900 uppercase leading-[0.85] mb-6">Localisez nos <br/>marchés <span className="text-emerald-600">Locaux.</span></h2>
-                            <p className="text-gray-500 font-bold mb-10 text-lg leading-relaxed">Trouvez instantanément le marché le plus proche de chez vous. Que vous cherchiez des légumes frais, du bétail ou nos snacks artisanaux, Google Maps vous guide directement vers l'Afrique authentique.</p>
-                            
-                            <a 
-                                href="https://www.google.com/maps/search/marche+africain+local" 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-4 bg-emerald-600 text-white px-10 py-5 rounded-full font-black uppercase tracking-tighter hover:bg-emerald-700 transition-all shadow-2xl active:scale-95 group"
-                            >
-                                <Search size={20} className="group-hover:rotate-12 transition-transform" />
-                                Ouvrir dans Google Maps
-                            </a>
-                        </div>
+            {/* Add FAB - Button for users to know they can sell */}
+            <div className="fixed bottom-6 right-6 z-[60]">
+                <a 
+                    href="https://wa.me/22892052664?text=Bonjour,%20je%20souhaite%20publier%20mon%20marché%20ou%20mes%20produits%20sur%20Djapero." 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-16 h-16 bg-orange-500 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group relative"
+                >
+                    <div className="absolute inset-0 rounded-full bg-orange-500 animate-ping opacity-20 group-hover:hidden" />
+                    <Plus size={32} strokeWidth={3} />
+                    
+                    {/* Tooltip */}
+                    <div className={`absolute right-full mr-4 px-4 py-2 rounded-xl border shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap ${isLight ? 'bg-white border-slate-100' : 'bg-[#0f172a] border-white/10'}`}>
+                        <p className={`text-[10px] font-black uppercase tracking-widest ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>Publier mon marché</p>
                     </div>
-                    <div className="lg:w-1/2 h-[400px] lg:h-auto bg-gray-50 relative group cursor-pointer overflow-hidden">
-                        {/* Mock Map / Iframe Container */}
-                        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&q=80&w=1200')] bg-cover bg-center opacity-40 group-hover:scale-110 transition-transform duration-1000 grayscale group-hover:grayscale-0"></div>
-                        <div className="absolute inset-0 bg-emerald-900/10 group-hover:bg-transparent transition-colors"></div>
-                        
-                        {/* Static Map elements */}
-                        <div className="absolute top-1/4 left-1/3 p-4 bg-white rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
-                             <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white"><MapPin size={16}/></div>
-                             <span className="font-black text-xs uppercase tracking-tighter">Marché Central</span>
-                        </div>
-                        <div className="absolute bottom-1/3 right-1/4 p-4 bg-white rounded-2xl shadow-2xl flex items-center gap-3 animate-pulse delay-700">
-                             <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-black"><Search size={16}/></div>
-                             <span className="font-black text-xs uppercase tracking-tighter">Point de Vente</span>
-                        </div>
-
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="bg-white/90 backdrop-blur-md p-6 rounded-[2.5rem] shadow-2xl border border-white max-w-xs text-center transform -rotate-2">
-                                <p className="text-gray-900 font-black tracking-tighter text-xl mb-2 text-center">Navigation Temps Réel</p>
-                                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Connecté à Google Maps API</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+                </a>
+            </div>
         </div>
     );
-};
-
-export default Market;
+}

@@ -143,6 +143,18 @@ export interface Settings {
     heroSubtitle?: string;
     bannerTitle?: string;
     bannerDesc?: string;
+    welcomeTitle?: string;
+    welcomeSubtitle?: string;
+    welcomeBtnText?: string;
+    welcomeBtnLink?: string;
+    welcomeBadgeText?: string;
+    welcomeBgColor?: string;
+    welcomeImage?: string;
+    animCatalogImage?: string;
+    animMarketImage?: string;
+    animDeliveryImage?: string;
+    animServicesImage?: string;
+    animTeamImage?: string;
     statsTitle?: string;
     statsValue1?: string;
     statsLabel1?: string;
@@ -208,9 +220,21 @@ export interface Ad {
     id: string;
     title: string;
     subtitle: string;
+    price?: string;
     imageUrl: string;
     link?: string;
     active: boolean;
+    createdAt: number;
+}
+
+export interface TeamMember {
+    id: string;
+    name: string;
+    role: string;
+    img: string;
+    phone?: string;
+    description?: string;
+    prestations: string[];
     createdAt: number;
 }
 
@@ -225,6 +249,7 @@ export interface AppData {
     heroBanners: HeroBanner[];
     settings: Settings;
     users: UserProfile[];
+    team: TeamMember[];
 }
 
 export interface HeroBanner {
@@ -249,12 +274,18 @@ export function useData() {
         ads: [],
         heroBanners: [],
         settings: { whatsapp: "22892052664", call: "22892052664" },
-        users: []
+        users: [],
+        team: []
     });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         setLoading(true);
+
+        const dataTimeout = setTimeout(() => {
+            console.log("Data loading fallback triggered");
+            setLoading(false);
+        }, 5000);
 
         const unsubSettings = onSnapshot(doc(db, "settings", "main"), (docSnap) => {
             if (docSnap.exists()) {
@@ -339,7 +370,15 @@ export function useData() {
             handleFirestoreError(error, OperationType.LIST, "users");
         });
 
+        const unsubTeam = onSnapshot(query(collection(db, "team"), orderBy("createdAt", "desc")), (snap) => {
+            const team = snap.docs.map(d => ({ id: d.id, ...d.data() } as TeamMember));
+            setData(prev => ({ ...prev, team }));
+        }, (error) => {
+            handleFirestoreError(error, OperationType.LIST, "team");
+        });
+
         return () => {
+            clearTimeout(dataTimeout);
             unsubSettings();
             unsubProducts();
             unsubServices();
@@ -350,6 +389,7 @@ export function useData() {
             unsubAds();
             unsubHero();
             unsubUsers();
+            unsubTeam();
         };
     }, []);
 
@@ -593,6 +633,36 @@ export function useData() {
         }
     };
 
+    const addTeamMember = async (member: Omit<TeamMember, 'id'>) => {
+        try {
+            await addDoc(collection(db, "team"), member);
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.CREATE, "team");
+            return false;
+        }
+    };
+
+    const updateTeamMember = async (id: string, member: Partial<TeamMember>) => {
+        try {
+            await updateDoc(doc(db, "team", id), member);
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `team/${id}`);
+            return false;
+        }
+    };
+
+    const deleteTeamMember = async (id: string) => {
+        try {
+            await deleteDoc(doc(db, "team", id));
+            return true;
+        } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `team/${id}`);
+            return false;
+        }
+    };
+
     return { 
         data, 
         loading, 
@@ -619,6 +689,9 @@ export function useData() {
         deleteAd,
         addHeroBanner,
         updateHeroBanner,
-        deleteHeroBanner
+        deleteHeroBanner,
+        addTeamMember,
+        updateTeamMember,
+        deleteTeamMember
     };
 }

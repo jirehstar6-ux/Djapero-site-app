@@ -10,23 +10,12 @@ export default defineConfig(({mode}) => {
     plugins: [
       react(), 
       tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        manifest: {
-          name: 'Culture Connectée',
-          short_name: 'CultCon',
-          description: 'Rejoignez l\'élite agricole africaine.',
-          theme_color: '#080202',
-          icons: [
-            {
-              src: 'https://cdn-icons-png.flaticon.com/512/188/188333.png',
-              sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
-        }
-      })
     ],
+    base: '/',
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+    },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

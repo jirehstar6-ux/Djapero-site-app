@@ -8,12 +8,17 @@ export default function Products() {
     const [search, setSearch] = useState("");
     const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
+    const [displayCount, setDisplayCount] = useState(12);
+
     if (loading || !data) return <div className="p-20 text-center">Chargement...</div>;
 
     const filteredProducts = data.products.filter(p => 
         p.name.toLowerCase().includes(search.toLowerCase()) || 
         p.description?.toLowerCase().includes(search.toLowerCase())
     );
+
+    const displayedProducts = filteredProducts.slice(0, displayCount);
+    const hasMore = filteredProducts.length > displayCount;
 
     return (
         <div className="w-full pt-20 px-4 md:px-10">
@@ -28,66 +33,76 @@ export default function Products() {
                             La <span className="text-emerald-500">Boutique</span>
                         </h2>
                     </div>
-                    <div className="w-full md:max-w-2xl relative group">
-                        <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-emerald-500 transition-colors" size={24} />
-                        <input 
-                            type="text" 
-                            placeholder="RECHERCHER UN PRODUIT DANS TOUTE LA BOUTIQUE..." 
-                            className="w-full pl-20 pr-10 py-7 rounded-[3rem] border-2 border-transparent bg-white shadow-2xl shadow-emerald-900/5 focus:border-emerald-500 outline-none transition-all font-black text-sm placeholder:text-gray-200 tracking-widest uppercase"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
+                    <div className="w-full md:flex-1 relative group">
+                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={24} />
+                            <input 
+                                type="text" 
+                                placeholder="RECHERCHER UN PRODUIT DANS TOUTE LA BOUTIQUE..." 
+                                className="w-full pl-16 pr-6 py-6 rounded-[2rem] border-2 border-transparent bg-white shadow-xl shadow-emerald-900/5 focus:border-emerald-500 outline-none transition-all font-bold text-sm md:text-base placeholder:text-gray-300 tracking-wider uppercase"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
                     </div>
                 </div>
 
                 {filteredProducts.length === 0 ? (
-                    <div className="text-center py-40 bg-white rounded-[4rem] border-2 border-dashed border-emerald-50 shadow-inner">
+                    <div className="text-center py-40 bg-white rounded-3xl border-2 border-dashed border-emerald-50 shadow-inner">
                         <ShoppingBag size={80} className="mx-auto mb-6 text-emerald-50" />
                         <p className="text-3xl font-black text-gray-200 uppercase tracking-tighter">Aucun produit dans cette sélection</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-8 4xl:grid-cols-10 gap-4 md:gap-8">
-                        {filteredProducts.map((p, idx) => (
-                            <motion.div 
-                                key={p.id}
-                                initial={{ opacity: 0, y: 30 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.03 }}
-                                onClick={() => setSelectedProduct(p)}
-                                className="group relative bg-[#0f172a] rounded-[3rem] p-6 border border-white/5 hover:border-[#a3e635]/30 shadow-[0_40px_80px_rgba(0,0,0,0.4)] transition-all flex flex-col h-full cursor-pointer hover:-translate-y-3 duration-500"
-                            >
-                                <div className="relative aspect-square rounded-[2rem] overflow-hidden mb-8">
-                                    <motion.img 
-                                        src={p.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
-                                        alt={p.name} 
-                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                                    />
-                                    <div className="absolute top-4 right-4 bg-[#a3e635] text-black px-4 py-1.5 rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg z-10">
-                                        NOUVEAU
+                    <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-7 4xl:grid-cols-8 gap-3 md:gap-8">
+                            {displayedProducts.map((p, idx) => (
+                                <motion.div 
+                                    key={p.id}
+                                    initial={{ opacity: 0, y: 30 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.03 }}
+                                    onClick={() => setSelectedProduct(p)}
+                                    className="group relative bg-[#0f172a] rounded-3xl p-4 md:p-6 border border-white/5 hover:border-[#a3e635]/30 shadow-xl transition-all flex flex-col h-full cursor-pointer hover:-translate-y-1 md:hover:-translate-y-3 duration-500"
+                                >
+                                    <div className="relative aspect-square rounded-2xl overflow-hidden mb-4 md:mb-8 bg-white">
+                                        <motion.img 
+                                            src={p.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800"} 
+                                            alt={p.name} 
+                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                        />
+                                        <div className="absolute top-3 right-3 md:top-4 md:right-4 bg-[#a3e635] text-black px-3 md:px-4 py-1 rounded-full font-black text-[8px] md:text-[9px] uppercase tracking-widest shadow-lg z-10">
+                                            NOUVEAU
+                                        </div>
                                     </div>
-                                </div>
+    
+                                    <div className="px-1 md:px-2 pb-2 flex-grow flex flex-col">
+                                        <div className="flex flex-col md:flex-row justify-between md:items-baseline mb-1 md:mb-2 gap-1">
+                                            <h3 className="text-xs md:text-2xl font-black text-white uppercase tracking-tighter truncate md:max-w-[70%]">{p.name}</h3>
+                                            <span className="text-xs md:text-2xl font-black text-[#a3e635] tracking-tighter">
+                                                {p.price} 
+                                            </span>
+                                        </div>
+                                        <p className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-white/20 mb-3 md:mb-8">
+                                            Qualité Djapero
+                                        </p>
+                                        
+                                        <button className="w-full py-2.5 md:pt-[27px] md:pb-[18px] md:pl-0 mt-auto rounded-xl md:rounded-2xl bg-white text-black font-black uppercase text-[8px] md:text-[10px] tracking-widest hover:bg-[#a3e635] transition-all shadow-xl">
+                                            Détails
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
 
-                                <div className="px-2 pb-2 flex-grow">
-                                    <div className="flex justify-between items-baseline mb-1">
-                                        <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tighter truncate max-w-[70%]">{p.name}</h3>
-                                        <span className="text-xl md:text-2xl font-black text-[#a3e635] tracking-tighter">
-                                            {p.price} 
-                                            {!p.price.toString().toUpperCase().includes('FCFA') && (
-                                                <span className="text-[10px] opacity-40 uppercase tracking-widest ml-1 font-black">FCFA</span>
-                                            )}
-                                        </span>
-                                    </div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-8">
-                                        Qualité Djapero • Stock Disponible
-                                    </p>
-                                    
-                                    <button className="w-full pt-[27px] pb-[18px] pl-0 ml-[-4px] mr-[25px] rounded-2xl bg-white text-black font-black uppercase text-[10px] tracking-widest hover:bg-[#a3e635] transition-all shadow-xl">
-                                        Détails du Produit
-                                    </button>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
+                        {hasMore && (
+                            <div className="mt-16 flex justify-center pb-12">
+                                <button 
+                                    onClick={() => setDisplayCount(prev => prev + 12)}
+                                    className="bg-[#a3e635] text-black px-12 py-5 rounded-[2rem] font-[1000] uppercase tracking-widest text-xs hover:bg-white transition-all shadow-2xl shadow-[#a3e635]/20 active:scale-95"
+                                >
+                                    Charger Plus de Produits
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
 
 
@@ -106,7 +121,7 @@ export default function Products() {
                                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                                className="relative w-full max-w-5xl bg-white rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
+                                className="relative w-full max-w-5xl bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
                             >
                                 <button 
                                     onClick={() => setSelectedProduct(null)}
@@ -159,7 +174,7 @@ export default function Products() {
                                         </div>
                                     </div>
 
-                                    <div className="group bg-[#f8fafc] p-8 rounded-[2.5rem] mb-10 border border-[#e2e8f0]/40 relative overflow-hidden">
+                                    <div className="group bg-[#f8fafc] p-8 rounded-3xl mb-10 border border-[#e2e8f0]/40 relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl" />
                                         <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/40 mb-4 flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
